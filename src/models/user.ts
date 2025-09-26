@@ -1,12 +1,14 @@
-import fs from 'fs'
-import path from 'path'
+// src/models/user.ts
 import bcrypt from 'bcryptjs'
-import { AxiosResponse } from 'axios'
 import { QueryResult } from 'pg'
 import query from '../util/db'
 import sendEmail from '../util/mail'
 
-interface AccountType {
+/**
+ * Mirrors DB columns; everything optional so we can do partial updates safely.
+ * Note: email & username are CITEXT in DB (case-insensitive).
+ */
+export interface Account {
   displayName?: string
   username?: string
   email?: string
@@ -14,24 +16,9 @@ interface AccountType {
   hashedPassword?: string
   activated?: boolean
   activateToken?: string | null
-  resetPasswordToken?: string | null
-  socketId?: string | null
-}
-
-export interface UserConfigType {
-  createdAt?: Date
-  updatedAt?: Date
-  displayName: string
-  username: string
-  email: string
-  profilePicURL?: string | null
-  hashedPassword: string
-  activated: boolean
-  activateToken?: string | null
   activateTokenTimestamp?: Date | null
   resetPasswordToken?: string | null
   resetPasswordTokenTimestamp?: Date | null
-  socketId?: string | null
   id?: string
 }
 
@@ -40,398 +27,312 @@ export interface AuthToken {
   activated: boolean
 }
 
-const updateUserQuery = (
-  userId: string,
-  updatedAccount: AccountType
-): Promise<QueryResult> => {
-  let queryString = 'UPDATE users SET'
-  const paramKeys: AccountType[keyof AccountType][] = []
-  Object.keys(updatedAccount).forEach((key, index) => {
-    paramKeys.push(updatedAccount[key as keyof AccountType])
-
-    if (index > 0) {
-      queryString = queryString + ','
-    }
-    switch (key) {
-      case 'displayName':
-        queryString = queryString + ' display_name = $' + (index + 1)
-        break
-      case 'username':
-        queryString = queryString + ' username = $' + (index + 1)
-        break
-      case 'email':
-        queryString = queryString + ' email = $' + (index + 1)
-        break
-      case 'profilePicURL':
-        queryString = queryString + ' profile_pic_url = $' + (index + 1)
-        break
-      case 'hashedPassword':
-        queryString = queryString + ' hashed_password = $' + (index + 1)
-        break
-      case 'activated':
-        queryString = queryString + ' activated = $' + (index + 1)
-        break
-      case 'activateToken':
-        queryString = queryString + ' activate_token = $' + (index + 1)
-        break
-      case 'resetPasswordToken':
-        queryString = queryString + ' reset_password_token = $' + (index + 1)
-        break
-      case 'socketId':
-        queryString = queryString + ' socket_id = $' + (index + 1)
-        break
-
-      default:
-        break
-    }
-  })
-  paramKeys.push(userId)
-
-  queryString =
-    queryString + ' WHERE user_id = $' + paramKeys.length + ' RETURNING *;'
-
-  return query(queryString, paramKeys)
-}
-
-class User {
+export default class User implements Account {
   createdAt?: Date
   updatedAt?: Date
-  displayName: string
-  username: string
-  email: string
+  displayName?: string
+  username?: string
+  email?: string
   profilePicURL?: string | null
-  hashedPassword: string
-  activated: boolean
+  hashedPassword?: string
+  activated?: boolean
   activateToken?: string | null
-  activateTokenTimestamp: Date
+  activateTokenTimestamp?: Date | null
   resetPasswordToken?: string | null
-  resetPasswordTokenTimestamp: Date
-  socketId?: string | null
+  resetPasswordTokenTimestamp?: Date | null
   id?: string
 
-  constructor(config: UserConfigType) {
-    this.createdAt = config.createdAt
-    this.updatedAt = config.updatedAt
-    this.displayName = config.displayName || ''
-    this.username = config.username || ''
-    this.email = config.email || ''
-    this.profilePicURL = config.profilePicURL
-    this.hashedPassword = config.hashedPassword || ''
-    this.activated = config.activated
-    this.activateToken = config.activateToken
-    this.activateTokenTimestamp = config.activateTokenTimestamp || new Date()
-    this.resetPasswordToken = config.resetPasswordToken
-    this.resetPasswordTokenTimestamp =
-      config.resetPasswordTokenTimestamp || new Date()
-    this.socketId = config.socketId
-    this.id = config.id
+  constructor(props: Account = {}) {
+    Object.assign(this, props)
   }
 
-  /**
-   * Creates the user in the database.
-   * @returns Whether or not the action was successful.
-   */
-  create(): Promise<User> {
-    const newAccount: AccountType = {
-      displayName: this.displayName,
-      username: this.username,
-      email: this.email,
-      profilePicURL: this.profilePicURL,
-      hashedPassword: this.hashedPassword,
-      activated: this.activated,
-      activateToken: this.activateToken,
-      resetPasswordToken: this.resetPasswordToken,
-      socketId: this.socketId,
-    }
+  // ---------- Creation ----------
 
-    return query(
-      'INSERT INTO users (display_name, username, email, hashed_password, activated, activate_token, reset_password_token, socket_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *;',
-      [
-        newAccount.displayName,
-        newAccount.username,
-        newAccount.email,
-        newAccount.hashedPassword,
-        newAccount.activated,
-        newAccount.activateToken,
-        newAccount.resetPasswordToken,
-        newAccount.socketId,
-      ]
-    )
-      .then((result) => {
-        if (result?.rowCount! > 0) {
-          this.createdAt = result.rows[0]['created_at']
-          this.updatedAt = result.rows[0]['updated_at']
-          this.activateTokenTimestamp =
-            result.rows[0]['activate_token_timestamp']
-          this.resetPasswordTokenTimestamp =
-            result.rows[0]['reset_password_token_timestamp']
-          this.id = result.rows[0]['user_id']
-          return this
-        } else {
-          throw new Error('Could not update user on database.')
+  /**
+   * Creates a user. Token timestamps are managed by DB triggers.
+   */
+  async create(): Promise<User> {
+    const sql = `
+      INSERT INTO users (
+        display_name, username, email, profile_pic_url,
+        hashed_password, activated, activate_token, reset_password_token
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      RETURNING *
+    `
+    const params = [
+      this.displayName,
+      this.username,
+      this.email,
+      this.profilePicURL ?? null,
+      this.hashedPassword,
+      this.activated ?? false,
+      this.activateToken ?? null,
+      this.resetPasswordToken ?? null,
+    ]
+
+    try {
+      const result = await query(sql, params)
+      if (result.rowCount && result.rowCount > 0) {
+        return User.parseRow(result.rows[0])
+      }
+      throw new Error('Insert returned no rows')
+    } catch (err: any) {
+      // Unique constraint violations (23505): email/username
+      if (err?.code === '23505') {
+        if (String(err.detail || '').includes('(email)')) {
+          throw new Error('Email already in use.')
         }
-      })
-      .catch((error) => {
-        console.error(error)
-        throw new Error(error)
-      })
-  }
-
-  /**
-   * Finds out if this user exists in the database.
-   * @returns Whether or not the user has been created in the database.
-   */
-  isCreated(): Promise<boolean> {
-    if (this.id) {
-      return query('SELECT * FROM users WHERE user_id = $1;', [this.id])
-        .then((result) => {
-          return result?.rowCount! > 0
-        })
-        .catch(() => {
-          return false
-        })
-    } else {
-      return Promise.resolve(false)
+        if (String(err.detail || '').includes('(username)')) {
+          throw new Error('Username already in use.')
+        }
+      }
+      throw err
     }
   }
 
   /**
-   * Activates the account with the activation token.
-   * @param token The token used to activate the account.
-   * @returns Whether or not the token could successfully activate the account.
+   * Returns whether DB contains this user id.
    */
-  async activate(token: string): Promise<User> {
-    if (this.id) {
-      if (token !== this.activateToken) {
-        throw new Error('The activation token is incorrect.')
-      } else if (
-        this.activateTokenTimestamp < new Date(Date.now() - 15 * 60 * 1000)
-      ) {
+  async isCreated(): Promise<boolean> {
+    if (!this.id) return false
+    const r = await query('SELECT 1 FROM users WHERE user_id = $1', [this.id])
+    return !!r.rowCount
+  }
+
+  // ---------- Updates ----------
+
+  /**
+   * Partial update. Pass only fields you want to change.
+   * `updated_at` is handled by trigger in DB.
+   */
+  async update(patch: Account = {}): Promise<User> {
+    if (!this.id) throw new Error('This user does not exist.')
+
+    const sets: string[] = []
+    const values: any[] = []
+    const push = (sqlFragment: string, v: any) => {
+      values.push(v)
+      sets.push(`${sqlFragment} = $${values.length}`)
+    }
+
+    if ('displayName' in patch) push('display_name', patch.displayName)
+    if ('username' in patch) push('username', patch.username)
+    if ('email' in patch) push('email', patch.email)
+    if ('profilePicURL' in patch)
+      push('profile_pic_url', patch.profilePicURL ?? null)
+    if ('hashedPassword' in patch) push('hashed_password', patch.hashedPassword)
+    if ('activated' in patch) push('activated', patch.activated)
+    if ('activateToken' in patch)
+      push('activate_token', patch.activateToken ?? null)
+    if ('resetPasswordToken' in patch)
+      push('reset_password_token', patch.resetPasswordToken ?? null)
+
+    if (sets.length === 0) return this.reload()
+
+    const sql = `UPDATE users SET ${sets.join(', ')} WHERE user_id = $${
+      values.length + 1
+    } RETURNING *`
+    values.push(this.id)
+
+    const result = await query(sql, values)
+    if (!result.rowCount) throw new Error('Could not update user.')
+    const fresh = User.parseRow(result.rows[0])
+    Object.assign(this, fresh)
+    return this
+  }
+
+  /**
+   * Reloads from DB.
+   */
+  async reload(): Promise<User> {
+    if (!this.id) throw new Error('This user does not exist.')
+    const res = await query('SELECT * FROM users WHERE user_id = $1', [this.id])
+    if (!res.rowCount) throw new Error('Could not reload user.')
+    Object.assign(this, User.parseRow(res.rows[0]))
+    return this
+  }
+
+  /**
+   * Deletes the user.
+   */
+  async delete(): Promise<void> {
+    if (!this.id) return
+    await query('DELETE FROM users WHERE user_id = $1', [this.id])
+  }
+
+  // ---------- Auth flows ----------
+
+  /**
+   * Generate a 6-digit code (with leading zeros).
+   */
+  static generateActivateToken(): string {
+    let code = Math.floor(Math.random() * 1_000_000).toString()
+    while (code.length < 6) code = '0' + code
+    return code
+  }
+
+  /**
+   * Activates the account using the code. Also clears the token.
+   * Respects token timestamp (15 min window) if present.
+   */
+  async activate(code: string): Promise<User> {
+    if (!this.id) throw new Error('User is not yet saved to the database.')
+    await this.reload()
+
+    if (!this.activateToken) throw new Error('No activation token set.')
+    if (code !== this.activateToken)
+      throw new Error('The activation token is incorrect.')
+
+    if (this.activateTokenTimestamp) {
+      const expiryMs = 15 * 60 * 1000
+      const expired =
+        this.activateTokenTimestamp.getTime() < Date.now() - expiryMs
+      if (expired)
         throw new Error(
           'The activation token is expired. You need to request a new one.'
         )
-      }
-
-      this.activated = true
-      this.activateToken = null
-      await this.update()
-      return this
-    } else {
-      throw new Error('User is not yet saved to the database.')
     }
-  }
 
-  async resetPassword(newPassword: string): Promise<User> {
-    if (this.id) {
-      if (
-        this.resetPasswordTokenTimestamp < new Date(Date.now() - 15 * 60 * 1000)
-      ) {
-        throw new Error('This reset token is expired.')
-      }
-      const newHashedPassword = await bcrypt.hash(newPassword, 12)
-
-      this.hashedPassword = newHashedPassword
-      this.resetPasswordToken = null
-      await this.update()
-
-      return this
-    } else {
-      throw new Error('User is not yet saved to database.')
-    }
+    await this.update({ activated: true, activateToken: null })
+    return this
   }
 
   /**
-   * Updates the user in the database.
-   * @returns Whether or not the action was successful.
+   * Starts password reset by setting a token (timestamp is handled by DB trigger).
    */
-  update(): Promise<User> {
-    if (this.id) {
-      const updatedAccount: AccountType = {
-        displayName: this.displayName,
-        username: this.username,
-        email: this.email,
-        profilePicURL: this.profilePicURL,
-        hashedPassword: this.hashedPassword,
-        activated: this.activated,
-        activateToken: this.activateToken,
-        resetPasswordToken: this.resetPasswordToken,
-        socketId: this.socketId,
-      }
-
-      return updateUserQuery(this.id, updatedAccount)
-        .then((result) => {
-          if (result?.rowCount! > 0) {
-            this.updatedAt = result.rows[0]['updated_at']
-            this.activateTokenTimestamp =
-              result.rows[0]['activate_token_timestamp']
-            this.resetPasswordTokenTimestamp =
-              result.rows[0]['reset_password_token_timestamp']
-            return this
-          } else {
-            throw new Error('Could not update user with database.')
-          }
-        })
-        .catch((error) => {
-          console.error(error)
-          throw new Error(error)
-        })
-    } else {
-      throw new Error('This user does not exist.')
-    }
+  async beginPasswordReset(resetToken: string): Promise<User> {
+    if (!this.id) throw new Error('User is not yet saved to the database.')
+    await this.update({ resetPasswordToken: resetToken })
+    return this
   }
 
   /**
-   * Deletes the user from the database.
-   * @returns Whether or not the action was successful.
+   * Completes password reset given a token and a new password.
+   * Clears token afterward.
    */
-  delete(): Promise<User> {
-    if (this.id) {
-      return query('DELETE FROM users WHERE user_id = $1 RETURNING *;', [
-        this.id!,
-      ])
-        .then((result) => {
-          if (this.profilePicURL) {
-            const imgPath = path.join(
-              __dirname,
-              '..',
-              '..',
-              'uploads',
-              this.profilePicURL
-            )
-            fs.unlink(imgPath, () => {
-              console.log('Profile Picture Deleted')
-            })
-          }
+  async completePasswordReset(
+    token: string,
+    newPassword: string
+  ): Promise<User> {
+    if (!this.id) throw new Error('User is not yet saved to the database.')
+    await this.reload()
 
-          if (result?.rowCount! > 0) {
-            return this
-          } else {
-            throw new Error('Could not delete user from database.')
-          }
-        })
-        .catch((error) => {
-          console.error(error)
-          throw new Error('Could not delete user from database.')
-        })
-    } else {
-      throw new Error('Could not delete user.')
+    if (!this.resetPasswordToken) throw new Error('No reset token set.')
+    if (token !== this.resetPasswordToken)
+      throw new Error('Reset token is incorrect.')
+
+    if (this.resetPasswordTokenTimestamp) {
+      const expiryMs = 60 * 60 * 1000 // 1 hour window
+      const expired =
+        this.resetPasswordTokenTimestamp.getTime() < Date.now() - expiryMs
+      if (expired) throw new Error('This reset token is expired.')
     }
+
+    const newHashedPassword = await bcrypt.hash(newPassword, 12)
+    await this.update({
+      hashedPassword: newHashedPassword,
+      resetPasswordToken: null,
+    })
+    return this
   }
 
-  sendActivationCodeEmail = (): Promise<AxiosResponse<any>> => {
+  /**
+   * Utility: verify a plaintext password against the stored hash.
+   */
+  async verifyPassword(plaintext: string): Promise<boolean> {
+    if (!this.hashedPassword) return false
+    return bcrypt.compare(plaintext, this.hashedPassword)
+  }
+
+  // ---------- Mail helpers (reuse your mailer) ----------
+
+  sendActivationEmail() {
+    if (!this.email || !this.username || !this.activateToken) {
+      return Promise.reject(
+        new Error('Missing email, username, or activation token.')
+      )
+    }
     return sendEmail(
       this.email,
       `${this.username}`,
-      'Verification Code - Web Messages',
+      'Your Verification Code',
       `Your verification code is ${this.activateToken}. It expires in 15 minutes.`
     )
   }
 
-  sendPasswordResetEmail = (): Promise<AxiosResponse<any>> => {
-    const rootDomain = process.env.APP_DOMAIN_NAME
-      ? process.env.APP_DOMAIN_NAME
-      : 'http://localhost:3000'
-    const url = rootDomain + '/auth/reset-password/' + this.resetPasswordToken
-
+  sendPasswordResetEmail(
+    appDomain = process.env.APP_DOMAIN_NAME || 'http://localhost:3000'
+  ) {
+    if (!this.email || !this.username || !this.resetPasswordToken) {
+      return Promise.reject(
+        new Error('Missing email, username, or reset token.')
+      )
+    }
+    const url = `${appDomain}/auth/reset-password/${this.resetPasswordToken}`
     return sendEmail(
       this.email,
       `${this.username}`,
-      'Reset Password - Web Messages',
-      `Please click <a href="${url}">here</a> to reset your password. If you did not request a password reset, someone may be tyring to break into your account.`
+      'Reset Password',
+      `Please click <a href="${url}">here</a> to reset your password. If you did not request a password reset, someone may be trying to access your account.`
     )
   }
 
-  static generateActivateToken = (): string => {
-    let activateToken = Math.floor(Math.random() * 1000000).toString()
-    while (activateToken.length < 6) {
-      activateToken = '0' + activateToken
-    }
-    return activateToken
+  // ---------- Lookups ----------
+
+  static async accountWithEmailExists(email: string): Promise<boolean> {
+    const r = await query('SELECT 1 FROM users WHERE email = $1', [email])
+    return !!r.rowCount
   }
 
-  static accountWithEmailExists = async (email: string): Promise<boolean> => {
-    const result = await query('SELECT user_id FROM users WHERE email = $1;', [
-      email,
-    ])
-    return result?.rowCount! > 0
+  static async accountWithUsernameExists(username: string): Promise<boolean> {
+    const r = await query('SELECT 1 FROM users WHERE username = $1', [username])
+    return !!r.rowCount
   }
 
-  static findById = (userId: string): Promise<User> => {
-    return query('SELECT * FROM users WHERE user_id = $1;', [userId])
-      .then((result) => {
-        if (result?.rowCount! > 0) {
-          return User.parseRow(result.rows[0])
-        } else {
-          throw new Error('Could not find this account.')
-        }
-      })
-      .catch((error) => {
-        throw new Error(error)
-      })
+  static async findById(id: string): Promise<User | null> {
+    const r = await query('SELECT * FROM users WHERE user_id = $1', [id])
+    return r.rowCount ? User.parseRow(r.rows[0]) : null
   }
 
-  static findByEmail = (email: string): Promise<User> => {
-    return query('SELECT * FROM users WHERE email = $1;', [email])
-      .then((result) => {
-        if (result?.rowCount! > 0) {
-          return User.parseRow(result.rows[0])
-        } else {
-          throw new Error('Could not find this account.')
-        }
-      })
-      .catch((error) => {
-        throw new Error(error)
-      })
+  static async findByEmail(email: string): Promise<User | null> {
+    // CITEXT means case-insensitive by default
+    const r = await query('SELECT * FROM users WHERE email = $1', [email])
+    return r.rowCount ? User.parseRow(r.rows[0]) : null
   }
 
-  static findByUsername = (username: string): Promise<User> => {
-    return query('SELECT * FROM users WHERE username = $1;', [username])
-      .then((result) => {
-        if (result?.rowCount! > 0) {
-          return User.parseRow(result.rows[0])
-        } else {
-          throw new Error('Could not find this account.')
-        }
-      })
-      .catch((error) => {
-        throw new Error(error)
-      })
+  static async findByUsername(username: string): Promise<User | null> {
+    const r = await query('SELECT * FROM users WHERE username = $1', [username])
+    return r.rowCount ? User.parseRow(r.rows[0]) : null
   }
 
-  static findByResetPasswordToken = (
-    resetPasswordToken: string
-  ): Promise<User> => {
-    return query('SELECT * FROM users WHERE reset_password_token = $1;', [
-      resetPasswordToken,
-    ])
-      .then((result) => {
-        if (result?.rowCount! > 0) {
-          return User.parseRow(result.rows[0])
-        } else {
-          throw new Error('Could not find this account.')
-        }
-      })
-      .catch((error) => {
-        throw new Error(error)
-      })
+  static async findByResetPasswordToken(token: string): Promise<User | null> {
+    const r = await query(
+      'SELECT * FROM users WHERE reset_password_token = $1',
+      [token]
+    )
+    return r.rowCount ? User.parseRow(r.rows[0]) : null
   }
 
-  static findBySocketId = (socketId: string): Promise<User | null> => {
-    return query('SELECT * FROM users WHERE socket_id = $1;', [socketId])
-      .then((result) => {
-        if (result?.rowCount! > 0) {
-          return User.parseRow(result.rows[0])
-        } else {
-          throw new Error('Could not find this account.')
-        }
-      })
-      .catch(() => {
-        // User not online
-        return null
-      })
+  /**
+   * Uses the new user_sessions table (socket_id moved out of users).
+   */
+  static async findBySocketId(socketId: string): Promise<User | null> {
+    const r = await query(
+      `
+      SELECT u.*
+      FROM user_sessions s
+      JOIN users u ON u.user_id = s.user_id
+      WHERE s.socket_id = $1
+      `,
+      [socketId]
+    )
+    return r.rowCount ? User.parseRow(r.rows[0]) : null
   }
 
-  static parseRow = (row: any): User => {
+  // ---------- Row mapping ----------
+
+  static parseRow(row: any): User {
     return new User({
       createdAt: row['created_at'],
       updatedAt: row['updated_at'],
@@ -445,10 +346,7 @@ class User {
       activateTokenTimestamp: row['activate_token_timestamp'],
       resetPasswordToken: row['reset_password_token'],
       resetPasswordTokenTimestamp: row['reset_password_token_timestamp'],
-      socketId: row['socket_id'],
       id: row['user_id'],
     })
   }
 }
-
-export default User
