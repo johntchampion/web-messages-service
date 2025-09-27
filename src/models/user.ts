@@ -156,9 +156,10 @@ export default class User implements Account {
   /**
    * Deletes the user.
    */
-  async delete(): Promise<void> {
-    if (!this.id) return
+  async delete(): Promise<User> {
+    if (!this.id) throw new Error('This user does not exist.')
     await query('DELETE FROM users WHERE user_id = $1', [this.id])
+    return this
   }
 
   // ---------- Auth flows ----------
