@@ -63,7 +63,7 @@ export const logIn = async (
     if (match) {
       const tokenPayload: AuthToken = {
         userId: user.id!,
-        activated: user.activated || false,
+        verified: user.verified || false,
       }
       const token = jwt.sign(tokenPayload, process.env.TOKEN_SECRET as string, {
         expiresIn: '1h',
@@ -78,7 +78,7 @@ export const logIn = async (
           profilePicURL: getUploadURL(user.profilePicURL),
         },
         token: token,
-        activated: user.activated,
+        validated: user.verified,
         message: 'You are now logged in.',
       })
     } else {
@@ -131,8 +131,8 @@ export const signUp = async (
     username: username,
     email: email,
     hashedPassword: hashedPassword,
-    activated: false,
-    activateToken: User.generateActivateToken(),
+    verified: false,
+    verifyToken: User.generateVerifyToken(),
   })
 
   try {
@@ -151,7 +151,7 @@ export const signUp = async (
 
   const tokenPayload: AuthToken = {
     userId: newUser.id!,
-    activated: newUser.activated || false,
+    verified: newUser.verified || false,
   }
   const token = jwt.sign(tokenPayload, process.env.TOKEN_SECRET as string, {
     expiresIn: '1h',
@@ -166,8 +166,8 @@ export const signUp = async (
       profilePicURL: getUploadURL(newUser.profilePicURL),
     },
     token: token,
-    activated: newUser.activated,
-    message: 'Find our activation email to activate your account.',
+    verified: newUser.verified,
+    message: 'Find our activation email to validate your account.',
   })
 }
 
@@ -184,7 +184,7 @@ export const confirmEmail = async (
     })
   }
 
-  const activateToken = req.body.activateToken
+  const verifyToken = req.body.verifyToken
 
   let user: User | null
   try {
@@ -202,18 +202,18 @@ export const confirmEmail = async (
   }
 
   try {
-    await user.activate(activateToken as string)
+    await user.verify(verifyToken as string)
 
     const tokenPayload: AuthToken = {
       userId: user.id!,
-      activated: user.activated || false,
+      verified: user.verified || false,
     }
     const token = jwt.sign(tokenPayload, process.env.TOKEN_SECRET as string, {
       expiresIn: '1h',
     })
 
     return res.status(200).json({
-      activated: user.activated,
+      verified: user.verified,
       token: token,
       message: 'You can now sign into the account.',
     })
@@ -238,7 +238,7 @@ export const resendEmailVerificationCode = async (
       return next(RequestError.accountDoesNotExist())
     }
 
-    user.activateToken = User.generateActivateToken()
+    user.verifyToken = User.generateVerifyToken()
     await user.update()
 
     if (process.env.NODE_ENV !== 'test') {

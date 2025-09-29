@@ -1,6 +1,5 @@
 // src/models/user.ts
 import bcrypt from 'bcryptjs'
-import { QueryResult } from 'pg'
 import query from '../util/db'
 import sendEmail from '../util/mail'
 
@@ -9,14 +8,16 @@ import sendEmail from '../util/mail'
  * Note: email & username are CITEXT in DB (case-insensitive).
  */
 export interface Account {
+  createdAt?: Date
+  updatedAt?: Date
   displayName?: string
   username?: string
   email?: string
   profilePicURL?: string | null
   hashedPassword?: string
-  activated?: boolean
-  activateToken?: string | null
-  activateTokenTimestamp?: Date | null
+  verified?: boolean
+  verifyToken?: string | null
+  verifyTokenTimestamp?: Date | null
   resetPasswordToken?: string | null
   resetPasswordTokenTimestamp?: Date | null
   id?: string
@@ -24,7 +25,7 @@ export interface Account {
 
 export interface AuthToken {
   userId: string
-  activated: boolean
+  verified: boolean
 }
 
 export default class User implements Account {
@@ -35,9 +36,9 @@ export default class User implements Account {
   email?: string
   profilePicURL?: string | null
   hashedPassword?: string
-  activated?: boolean
-  activateToken?: string | null
-  activateTokenTimestamp?: Date | null
+  verified?: boolean
+  verifyToken?: string | null
+  verifyTokenTimestamp?: Date | null
   resetPasswordToken?: string | null
   resetPasswordTokenTimestamp?: Date | null
   id?: string
@@ -55,7 +56,7 @@ export default class User implements Account {
     const sql = `
       INSERT INTO users (
         display_name, username, email, profile_pic_url,
-        hashed_password, activated, activate_token, reset_password_token
+        hashed_password, verified, verify_token, reset_password_token
       )
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
       RETURNING *
@@ -66,8 +67,8 @@ export default class User implements Account {
       this.email,
       this.profilePicURL ?? null,
       this.hashedPassword,
-      this.activated ?? false,
-      this.activateToken ?? null,
+      this.verified ?? false,
+      this.verifyToken ?? null,
       this.resetPasswordToken ?? null,
     ]
 
@@ -122,9 +123,8 @@ export default class User implements Account {
     if ('profilePicURL' in patch)
       push('profile_pic_url', patch.profilePicURL ?? null)
     if ('hashedPassword' in patch) push('hashed_password', patch.hashedPassword)
-    if ('activated' in patch) push('activated', patch.activated)
-    if ('activateToken' in patch)
-      push('activate_token', patch.activateToken ?? null)
+    if ('verified' in patch) push('verified', patch.verified)
+    if ('verifyToken' in patch) push('verify_token', patch.verifyToken ?? null)
     if ('resetPasswordToken' in patch)
       push('reset_password_token', patch.resetPasswordToken ?? null)
 
@@ -167,35 +167,35 @@ export default class User implements Account {
   /**
    * Generate a 6-digit code (with leading zeros).
    */
-  static generateActivateToken(): string {
+  static generateVerifyToken(): string {
     let code = Math.floor(Math.random() * 1_000_000).toString()
     while (code.length < 6) code = '0' + code
     return code
   }
 
   /**
-   * Activates the account using the code. Also clears the token.
+   * Verifies the account using the code. Also clears the token.
    * Respects token timestamp (15 min window) if present.
    */
-  async activate(code: string): Promise<User> {
+  async verify(code: string): Promise<User> {
     if (!this.id) throw new Error('User is not yet saved to the database.')
     await this.reload()
 
-    if (!this.activateToken) throw new Error('No activation token set.')
-    if (code !== this.activateToken)
+    if (!this.verifyToken) throw new Error('No verification token set.')
+    if (code !== this.verifyToken)
       throw new Error('The activation token is incorrect.')
 
-    if (this.activateTokenTimestamp) {
+    if (this.verifyTokenTimestamp) {
       const expiryMs = 15 * 60 * 1000
       const expired =
-        this.activateTokenTimestamp.getTime() < Date.now() - expiryMs
+        this.verifyTokenTimestamp.getTime() < Date.now() - expiryMs
       if (expired)
         throw new Error(
           'The activation token is expired. You need to request a new one.'
         )
     }
 
-    await this.update({ activated: true, activateToken: null })
+    await this.update({ verified: true, verifyToken: null })
     return this
   }
 
@@ -249,7 +249,7 @@ export default class User implements Account {
   // ---------- Mail helpers (reuse your mailer) ----------
 
   sendActivationEmail() {
-    if (!this.email || !this.username || !this.activateToken) {
+    if (!this.email || !this.username || !this.verifyToken) {
       return Promise.reject(
         new Error('Missing email, username, or activation token.')
       )
@@ -258,7 +258,7 @@ export default class User implements Account {
       this.email,
       `${this.username}`,
       'Your Verification Code',
-      `Your verification code is ${this.activateToken}. It expires in 15 minutes.`
+      `Your verification code is ${this.verifyToken}. It expires in 15 minutes.`
     )
   }
 
@@ -342,9 +342,9 @@ export default class User implements Account {
       email: row['email'],
       profilePicURL: row['profile_pic_url'],
       hashedPassword: row['hashed_password'],
-      activated: row['activated'],
-      activateToken: row['activate_token'],
-      activateTokenTimestamp: row['activate_token_timestamp'],
+      verified: row['verified'],
+      verifyToken: row['verify_token'],
+      verifyTokenTimestamp: row['verify_token_timestamp'],
       resetPasswordToken: row['reset_password_token'],
       resetPasswordTokenTimestamp: row['reset_password_token_timestamp'],
       id: row['user_id'],

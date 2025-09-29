@@ -13,6 +13,12 @@ class RequestError extends Error {
     return error
   }
 
+  static notVerified = () => {
+    const error = new RequestError('Not Verified.')
+    error.code = 401
+    return error
+  }
+
   static accountDoesNotExist = () => {
     const error = new RequestError('This account does not exist.')
     error.code = 404

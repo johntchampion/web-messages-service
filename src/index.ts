@@ -6,7 +6,9 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 dotenv.config({ path: path.join(__dirname, '..', '.env') })
 
+import RequestError from './util/error'
 import { setupSocketIO } from './util/io'
+import authRoutes from './routes/auth'
 import messageController from './controllers/message'
 import conversationController from './controllers/conversation'
 import { deleteConversations } from './util/cron'
@@ -24,8 +26,23 @@ app.get('/', (_: Request, res: Response, __: NextFunction) => {
   })
 })
 
+app.use('/auth', authRoutes)
 app.use(messageController)
 app.use(conversationController)
+
+app.get('/health-check', (req: Request, res: Response, next: NextFunction) => {
+  return res.status(200).json({
+    message: 'Alive and well.',
+  })
+})
+
+app.use(
+  (error: RequestError, req: Request, res: Response, next: NextFunction) => {
+    return res.status(error.code || 500).json({
+      message: error.message,
+    })
+  }
+)
 
 const job = CronJob.from({
   cronTime: '0 0 * * * *',
