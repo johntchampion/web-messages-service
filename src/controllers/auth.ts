@@ -137,13 +137,16 @@ export const signUp = async (
 
   try {
     await newUser.create()
-    if (process.env.NODE_ENV !== 'test') {
-      await newUser.sendActivationEmail()
+    if (
+      process.env.NODE_ENV !== 'test' &&
+      process.env.VERIFY_USERS === 'true'
+    ) {
+      await newUser.sendVerificationEmail()
     }
   } catch (error) {
     return next(
       RequestError.withMessageAndCode(
-        'Something went wrong creating your account.',
+        'Something went wrong sending a verification email.',
         500
       )
     )
@@ -167,7 +170,10 @@ export const signUp = async (
     },
     token: token,
     verified: newUser.verified,
-    message: 'Find our activation email to validate your account.',
+    message:
+      process.env.VERIFY_USERS === 'true'
+        ? 'Check your email for an account verification link.'
+        : 'You have successfully created your new account.',
   })
 }
 
@@ -242,7 +248,7 @@ export const resendEmailVerificationCode = async (
     await user.update()
 
     if (process.env.NODE_ENV !== 'test') {
-      await user.sendActivationEmail()
+      await user.sendVerificationEmail()
     }
 
     return res.status(200).json({
@@ -251,7 +257,7 @@ export const resendEmailVerificationCode = async (
   } catch (error) {
     return next(
       RequestError.withMessageAndCode(
-        'There was an error generating a new activation code.',
+        'There was an error generating a new verification code.',
         500
       )
     )

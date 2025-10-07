@@ -183,7 +183,7 @@ export default class User implements Account {
 
     if (!this.verifyToken) throw new Error('No verification token set.')
     if (code !== this.verifyToken)
-      throw new Error('The activation token is incorrect.')
+      throw new Error('The verification token is incorrect.')
 
     if (this.verifyTokenTimestamp) {
       const expiryMs = 15 * 60 * 1000
@@ -191,7 +191,7 @@ export default class User implements Account {
         this.verifyTokenTimestamp.getTime() < Date.now() - expiryMs
       if (expired)
         throw new Error(
-          'The activation token is expired. You need to request a new one.'
+          'The verification token is expired. You need to request a new one.'
         )
     }
 
@@ -248,10 +248,10 @@ export default class User implements Account {
 
   // ---------- Mail helpers (reuse your mailer) ----------
 
-  sendActivationEmail() {
+  sendVerificationEmail() {
     if (!this.email || !this.username || !this.verifyToken) {
       return Promise.reject(
-        new Error('Missing email, username, or activation token.')
+        new Error('Missing email, username, or verification token.')
       )
     }
     return sendEmail(
