@@ -30,8 +30,8 @@ export const getUploadURL = (
 ): string | null => {
   if (filename) {
     return (
-      (process.env.SERVICE_DOMAIN_NAME
-        ? `${process.env.SERVICE_DOMAIN_NAME}/uploads/`
+      (process.env.BASE_URL
+        ? `${process.env.BASE_URL}/uploads/`
         : 'http://localhost:8000/uploads/') + filename
     )
   } else {

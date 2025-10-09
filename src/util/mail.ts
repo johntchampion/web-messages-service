@@ -27,7 +27,7 @@ const sendEmail = (
         },
       ],
       from: {
-        email: 'noreply@messengerhawk.chat',
+        email: `noreply@${process.env.APP_BASE_URL}`,
         name: 'Messenger Hawk',
       },
     },

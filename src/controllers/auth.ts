@@ -244,8 +244,7 @@ export const resendEmailVerificationCode = async (
       return next(RequestError.accountDoesNotExist())
     }
 
-    user.verifyToken = User.generateVerifyToken()
-    await user.update()
+    await user.update({ verifyToken: User.generateVerifyToken() })
 
     if (process.env.NODE_ENV !== 'test') {
       await user.sendVerificationEmail()
@@ -290,10 +289,8 @@ export const requestPasswordReset = async (
     return next(RequestError.accountDoesNotExist())
   }
 
-  user.resetPasswordToken = token
-
   try {
-    await user.update()
+    await user.update({ resetPasswordToken: token })
   } catch (error) {
     return next(
       RequestError.withMessageAndCode(

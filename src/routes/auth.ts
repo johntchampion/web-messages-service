@@ -49,7 +49,11 @@ router.put(
   authController.resendEmailVerificationCode
 )
 
-router.put('/request-new-password', authController.requestPasswordReset)
+router.put(
+  '/request-new-password',
+  body('email').isEmail().withMessage('Email address is required'),
+  authController.requestPasswordReset
+)
 
 router.put('/reset-password', authController.resetPassword)
 

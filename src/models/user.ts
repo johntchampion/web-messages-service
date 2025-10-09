@@ -263,7 +263,7 @@ export default class User implements Account {
   }
 
   sendPasswordResetEmail(
-    appDomain = process.env.APP_DOMAIN_NAME || 'http://localhost:3000'
+    appDomain = process.env.APP_BASE_URL || 'http://localhost:3000'
   ) {
     if (!this.email || !this.username || !this.resetPasswordToken) {
       return Promise.reject(
