@@ -78,7 +78,7 @@ export const logIn = async (
           profilePicURL: getUploadURL(user.profilePicURL),
         },
         token: token,
-        validated: user.verified,
+        verified: user.verified,
         message: 'You are now logged in.',
       })
     } else {
@@ -301,7 +301,11 @@ export const requestPasswordReset = async (
   }
 
   if (process.env.NODE_ENV !== 'test') {
-    await user.sendPasswordResetEmail()
+    try {
+      await user.sendPasswordResetEmail()
+    } catch (error) {
+      console.log(JSON.stringify(error))
+    }
   }
 
   return res.status(200).json({
