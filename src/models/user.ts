@@ -1,4 +1,3 @@
-// src/models/user.ts
 import bcrypt from 'bcryptjs'
 import query from '../util/db'
 import sendEmail from '../util/mail'
@@ -21,6 +20,17 @@ export interface Account {
   resetPasswordToken?: string | null
   resetPasswordTokenTimestamp?: Date | null
   id?: string
+}
+
+export interface AccountPatch {
+  displayName?: string
+  username?: string
+  email?: string
+  profilePicURL?: string | null
+  hashedPassword?: string
+  verified?: boolean
+  verifyToken?: string | null
+  resetPasswordToken?: string | null
 }
 
 export interface AuthToken {
@@ -75,23 +85,8 @@ export default class User implements Account {
     try {
       const result = await query(sql, params)
       if (result.rowCount && result.rowCount > 0) {
-        const savedData = User.parseRow(result.rows[0])
-
-        this.createdAt = savedData.createdAt
-        this.updatedAt = savedData.updatedAt
-        this.displayName = savedData.displayName
-        this.username = savedData.username
-        this.email = savedData.email
-        this.profilePicURL = savedData.profilePicURL
-        this.hashedPassword = savedData.hashedPassword
-        this.verified = savedData.verified
-        this.verifyToken = savedData.verifyToken
-        this.verifyTokenTimestamp = savedData.verifyTokenTimestamp
-        this.resetPasswordToken = savedData.resetPasswordToken
-        this.resetPasswordTokenTimestamp = savedData.resetPasswordTokenTimestamp
-        this.id = savedData.id
-
-        return User.parseRow(result.rows[0])
+        Object.assign(this, User.parseRow(result.rows[0]))
+        return this
       }
       throw new Error('Insert returned no rows')
     } catch (err: any) {
@@ -109,7 +104,7 @@ export default class User implements Account {
   }
 
   /**
-   * Returns whether DB contains this user id.
+   * Returns whether DB contains this user.
    */
   async isCreated(): Promise<boolean> {
     if (!this.id) return false
@@ -117,14 +112,12 @@ export default class User implements Account {
     return !!r.rowCount
   }
 
-  // ---------- Updates ----------
-
   /**
    * Partial update. Pass only fields you want to change.
    * `updated_at` is handled by trigger in DB.
    */
-  async update(patch: Account = {}): Promise<User> {
-    if (!this.id) throw new Error('This user does not exist.')
+  async update(patch: AccountPatch = {}): Promise<User> {
+    if (!this.id) throw new Error('User has not been persisted yet.')
 
     const sets: string[] = []
     const values: any[] = []
@@ -152,7 +145,8 @@ export default class User implements Account {
     values.push(this.id)
 
     const result = await query(sql, values)
-    if (!result.rowCount) throw new Error('Could not update user.')
+    if (!result.rowCount) throw new Error('Failed to update user.')
+
     const fresh = User.parseRow(result.rows[0])
     Object.assign(this, fresh)
     return this
@@ -162,7 +156,7 @@ export default class User implements Account {
    * Reloads from DB.
    */
   async reload(): Promise<User> {
-    if (!this.id) throw new Error('This user does not exist.')
+    if (!this.id) throw new Error('User has not been persisted yet.')
     const res = await query('SELECT * FROM users WHERE user_id = $1', [this.id])
     if (!res.rowCount) throw new Error('Could not reload user.')
     Object.assign(this, User.parseRow(res.rows[0]))
