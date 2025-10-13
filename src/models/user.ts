@@ -75,6 +75,22 @@ export default class User implements Account {
     try {
       const result = await query(sql, params)
       if (result.rowCount && result.rowCount > 0) {
+        const savedData = User.parseRow(result.rows[0])
+
+        this.createdAt = savedData.createdAt
+        this.updatedAt = savedData.updatedAt
+        this.displayName = savedData.displayName
+        this.username = savedData.username
+        this.email = savedData.email
+        this.profilePicURL = savedData.profilePicURL
+        this.hashedPassword = savedData.hashedPassword
+        this.verified = savedData.verified
+        this.verifyToken = savedData.verifyToken
+        this.verifyTokenTimestamp = savedData.verifyTokenTimestamp
+        this.resetPasswordToken = savedData.resetPasswordToken
+        this.resetPasswordTokenTimestamp = savedData.resetPasswordTokenTimestamp
+        this.id = savedData.id
+
         return User.parseRow(result.rows[0])
       }
       throw new Error('Insert returned no rows')
