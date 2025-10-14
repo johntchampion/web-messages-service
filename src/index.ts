@@ -9,7 +9,7 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') })
 import RequestError from './util/error'
 import { setupSocketIO } from './util/io'
 import authRoutes from './routes/auth'
-import messageController from './controllers/message'
+import messageRoutes from './routes/message'
 import conversationController from './controllers/conversation'
 import { deleteConversations } from './util/cron'
 
@@ -27,7 +27,7 @@ app.get('/', (_: Request, res: Response, __: NextFunction) => {
 })
 
 app.use('/auth', authRoutes)
-app.use(messageController)
+app.use(messageRoutes)
 app.use(conversationController)
 
 app.get('/health-check', (req: Request, res: Response, next: NextFunction) => {
