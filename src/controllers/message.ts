@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express'
 
-import Message, { ContentType } from '../models/message'
+import Message from '../models/message'
 import Conversation from '../models/conversation'
 
 const router = Router()
@@ -18,7 +18,9 @@ router.get(
 
     try {
       const conversation = await Conversation.findById(convoId)
-      const messages = await Message.findByConvoId(convoId, limit, skip)
+      const messages = await Message.listByConversation(convoId, {
+        limit,
+      })
 
       return res.status(200).json({
         messages: messages,
@@ -26,9 +28,14 @@ router.get(
         deletionDate: conversation.getDeletionDate(),
       })
     } catch (error) {
-      return res.status(500).json({
-        error: error,
-        errorMessage: 'A server error has occured. Please try again later.',
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'A server error has occured. Please try again later.'
+      const code =
+        message === 'There is no conversation with that ID.' ? 410 : 500
+      return res.status(code).json({
+        errorMessage: message,
       })
     }
   }
@@ -46,19 +53,24 @@ router.post(
       const newMessage = new Message({
         convoId: convoId,
         content: content,
-        type: ContentType.Text,
+        type: 'text',
         senderName: userName,
         senderAvatar: userAvatar,
       })
-      await newMessage.update()
+      await newMessage.create()
 
       return res.status(200).json({
         message: newMessage,
       })
     } catch (error) {
-      return res.status(500).json({
-        error: error,
-        errorMessage: 'A server error has occured. Please try again later.',
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'A server error has occured. Please try again later.'
+      const code =
+        message === 'There is no conversation with that ID.' ? 410 : 500
+      return res.status(code).json({
+        errorMessage: message,
       })
     }
   }

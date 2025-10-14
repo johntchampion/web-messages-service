@@ -33,7 +33,9 @@ export const setupSocketIO = (server: http.Server) => {
 
       try {
         const conversation = await Conversation.findById(convoId)
-        const messages = await Message.findByConvoId(convoId, 50, 0)
+        const messages = await Message.listByConversation(convoId, {
+          limit: 50,
+        })
         socket.emit('messages', {
           messages,
           conversation,
@@ -63,7 +65,7 @@ export const setupSocketIO = (server: http.Server) => {
           const newMessage = new Message({
             convoId: convoId,
             content: content,
-            type: ContentType.Text,
+            type: 'text',
             senderName: userName,
             senderAvatar: userAvatar,
           })

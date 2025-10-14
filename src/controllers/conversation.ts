@@ -17,15 +17,14 @@ router.get(
         deletionDate: conversation.getDeletionDate(),
       })
     } catch (error) {
-      if (String(error) === 'Error: There is no conversation with that ID.') {
-        return res.status(410).json({
-          error: error,
-          errorMessage: 'This conversation has been deleted.',
-        })
-      }
-      return res.status(500).json({
-        error: error,
-        errorMessage: 'A server error has occured. Please try again later.',
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'A server error has occured. Please try again later.'
+      const code =
+        message === 'There is no conversation with that ID.' ? 410 : 500
+      return res.status(code).json({
+        errorMessage: message,
       })
     }
   }
@@ -46,8 +45,10 @@ router.post(
       })
     } catch (error) {
       return res.status(500).json({
-        error: error,
-        errorMessage: 'A server error has occured. Please try again later.',
+        errorMessage:
+          error instanceof Error
+            ? error.message
+            : 'A server error has occured. Please try again later.',
       })
     }
   }
@@ -64,9 +65,14 @@ router.delete(
 
       return res.sendStatus(200)
     } catch (error) {
-      return res.status(500).json({
-        error: error,
-        errorMessage: 'A server error has occured. Please try again later.',
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'A server error has occured. Please try again later.'
+      const code =
+        message === 'There is no conversation with that ID.' ? 410 : 500
+      return res.status(code).json({
+        errorMessage: message,
       })
     }
   }
