@@ -4,12 +4,16 @@ import jwt from 'jsonwebtoken'
 import RequestError from '../util/error'
 import { AuthToken } from '../models/user'
 
-const isAuth = (req: Request, res: Response, next: NextFunction) => {
+export const authentication = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   const authHeader = req.get('Authorization')
 
   if (!authHeader) {
     req.userId = null
-    throw RequestError.notAuthorized()
+    return next()
   } else {
     const token = authHeader.split(' ')[1]
     let decodedToken: AuthToken
@@ -20,11 +24,11 @@ const isAuth = (req: Request, res: Response, next: NextFunction) => {
       ) as AuthToken
     } catch (error) {
       req.userId = null
-      throw RequestError.notAuthorized()
+      return next()
     }
     if (!decodedToken) {
       req.userId = null
-      throw RequestError.notAuthorized()
+      return next()
     }
 
     req.userId = decodedToken.userId
@@ -33,4 +37,16 @@ const isAuth = (req: Request, res: Response, next: NextFunction) => {
   }
 }
 
-export default isAuth
+export const authorization = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const userId = req.userId
+
+  if (!userId) {
+    throw RequestError.notAuthorized()
+  } else {
+    return next()
+  }
+}

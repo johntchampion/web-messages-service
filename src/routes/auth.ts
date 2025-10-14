@@ -2,11 +2,11 @@ import { Router } from 'express'
 import { body } from 'express-validator'
 
 import * as authController from '../controllers/auth'
-import isAuth from '../middleware/auth'
+import { authentication, authorization } from '../middleware/auth'
 
 const router = Router()
 
-router.get('/ping', isAuth, authController.ping)
+router.get('/ping', authentication, authorization, authController.ping)
 
 router.put(
   '/login',
@@ -34,7 +34,8 @@ router.post(
 
 router.put(
   '/confirm-email',
-  isAuth,
+  authentication,
+  authorization,
   body('activateToken')
     .isLength({ min: 6, max: 6 })
     .withMessage('The activation code is 6 digits.')
@@ -45,7 +46,8 @@ router.put(
 
 router.put(
   '/resend-verification-code',
-  isAuth,
+  authentication,
+  authorization,
   authController.resendEmailVerificationCode
 )
 
@@ -57,6 +59,11 @@ router.put(
 
 router.put('/reset-password', authController.resetPassword)
 
-router.delete('/delete-account', isAuth, authController.deleteAccount)
+router.delete(
+  '/delete-account',
+  authentication,
+  authorization,
+  authController.deleteAccount
+)
 
 export default router

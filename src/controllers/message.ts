@@ -2,6 +2,8 @@ import { Router, Request, Response, NextFunction } from 'express'
 
 import Message from '../models/message'
 import Conversation from '../models/conversation'
+import User from '../models/user'
+import { authentication } from '../middleware/auth'
 
 const router = Router()
 
@@ -43,19 +45,23 @@ router.get(
 
 router.post(
   '/message',
+  authentication,
   async (req: Request, res: Response, next: NextFunction) => {
     const convoId: string = req.body.convoId
     const content: string = req.body.content
     const userName: string = req.body.userName
     const userAvatar: string = req.body.userAvatar
 
+    const user = req.userId ? await User.findById(req.userId!) : null
+
     try {
       const newMessage = new Message({
         convoId: convoId,
         content: content,
         type: 'text',
-        senderName: userName,
-        senderAvatar: userAvatar,
+        senderId: user ? user.id : null,
+        senderName: user ? null : userName,
+        senderAvatar: user ? null : userAvatar,
       })
       await newMessage.create()
 
