@@ -1,4 +1,4 @@
-# OneTimeChat - Service
+# Messenger Hawk - Service
 
 This is a basic backend service to support a messaging web app. It has REST API endpoints for certain functions and offers real-time message support with Socket.IO.
 
