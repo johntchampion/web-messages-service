@@ -8,17 +8,20 @@ class Conversation {
   updatedAt?: Date
   name: string
   id?: string
+  creatorId?: string | null
 
   constructor(config: {
     id?: string
     name: string
     createdAt?: Date
     updatedAt?: Date
+    creatorId?: string | null
   }) {
     this.id = config.id
     this.name = config.name
     this.createdAt = config.createdAt
     this.updatedAt = config.updatedAt
+    this.creatorId = config.creatorId
   }
 
   /**
@@ -28,13 +31,13 @@ class Conversation {
     let result
     if (this.id) {
       result = await query(
-        'UPDATE conversations SET name = $1 WHERE convo_id = $2 RETURNING *;',
-        [this.name, this.id]
+        'UPDATE conversations SET name = $1, creator_id = $2 WHERE convo_id = $3 RETURNING *;',
+        [this.name, this.creatorId, this.id]
       )
     } else {
       result = await query(
-        'INSERT INTO conversations (name) VALUES ($1) RETURNING *;',
-        [this.name]
+        'INSERT INTO conversations (name, creator_id) VALUES ($1, $2) RETURNING *;',
+        [this.name, this.creatorId]
       )
     }
 
@@ -42,6 +45,7 @@ class Conversation {
     this.createdAt = result.rows[0]['created_at']
     this.updatedAt = result.rows[0]['updated_at']
     this.id = result.rows[0]['convo_id']
+    this.creatorId = result.rows[0]['creator_id']
 
     return
   }
@@ -89,11 +93,36 @@ class Conversation {
         updatedAt: dbConversations.rows[0]['updated_at'],
         name: dbConversations.rows[0]['name'],
         id: dbConversations.rows[0]['convo_id'],
+        creatorId: dbConversations.rows[0]['creator_id'],
       })
       return conversation
     } else {
       throw new Error('There is no conversation with that ID.')
     }
+  }
+
+  /**
+   * Returns an array of Conversations created by a specific user.
+   * @param userId The ID of the user who created the conversations.
+   * @returns An array of Conversation objects created by the user.
+   */
+  static findByUserId = async (userId: string): Promise<Conversation[]> => {
+    const dbConversations = await query(
+      'SELECT * FROM conversations WHERE creator_id = $1 ORDER BY updated_at DESC;',
+      [userId]
+    )
+
+    const conversations = dbConversations.rows.map((c) => {
+      return new Conversation({
+        createdAt: c['created_at'],
+        updatedAt: c['updated_at'],
+        name: c['name'],
+        id: c['convo_id'],
+        creatorId: c['creator_id'],
+      })
+    })
+
+    return conversations
   }
 
   /**
@@ -125,10 +154,11 @@ class Conversation {
 
     const conversations = dbConversations.rows.map((c) => {
       return new Conversation({
-        createdAt: dbConversations.rows[0]['created_at'],
-        updatedAt: dbConversations.rows[0]['updated_at'],
-        name: dbConversations.rows[0]['name'],
-        id: dbConversations.rows[0]['convo_id'],
+        createdAt: c['created_at'],
+        updatedAt: c['updated_at'],
+        name: c['name'],
+        id: c['convo_id'],
+        creatorId: c['creator_id'],
       })
     })
 
