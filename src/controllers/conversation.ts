@@ -69,6 +69,40 @@ export const createConversation = async (req: Request, res: Response) => {
   }
 }
 
+export const updateConversation = async (req: Request, res: Response) => {
+  const convoId: string = req.params.convoId
+  const name: string = req.body.name
+
+  try {
+    const conversation = await Conversation.findById(convoId)
+
+    // Ensure only the creator can update the conversation
+    if (conversation.creatorId !== req.userId) {
+      return res.status(403).json({
+        errorMessage: 'Only the creator can update this conversation.',
+      })
+    }
+
+    conversation.name = name
+    await conversation.update()
+
+    return res.status(200).json({
+      conversation: conversation,
+      deletionDate: conversation.getDeletionDate(),
+    })
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : 'A server error has occured. Please try again later.'
+    const code =
+      message === 'There is no conversation with that ID.' ? 410 : 500
+    return res.status(code).json({
+      errorMessage: message,
+    })
+  }
+}
+
 export const deleteConversation = async (req: Request, res: Response) => {
   const convoId: string = req.params.convoId
 
