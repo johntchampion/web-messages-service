@@ -76,8 +76,9 @@ export const updateConversation = async (req: Request, res: Response) => {
   try {
     const conversation = await Conversation.findById(convoId)
 
-    // Ensure only the creator can update the conversation
-    if (conversation.creatorId !== req.userId) {
+    // If conversation has a creator, only that creator can update it
+    // If conversation has no creator (creatorId is null), anyone can update it
+    if (conversation.creatorId !== null && conversation.creatorId !== req.userId) {
       return res.status(403).json({
         errorMessage: 'Only the creator can update this conversation.',
       })

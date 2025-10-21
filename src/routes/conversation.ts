@@ -23,8 +23,7 @@ router.post(
 
 router.put(
   '/conversations/:convoId',
-  authentication,
-  authorization,
+  authentication, // Only authentication, not authorization - allows anonymous updates
   body('name').isLength({ min: 1 }).withMessage('A conversation name is required.'),
   conversationController.updateConversation
 )
