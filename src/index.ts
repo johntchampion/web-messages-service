@@ -10,7 +10,7 @@ import RequestError from './util/error'
 import { setupSocketIO } from './util/io'
 import authRoutes from './routes/auth'
 import messageRoutes from './routes/message'
-import conversationController from './controllers/conversation'
+import conversationRoutes from './routes/conversation'
 import { deleteConversations } from './util/cron'
 
 const app = express()
@@ -28,7 +28,7 @@ app.get('/', (_: Request, res: Response, __: NextFunction) => {
 
 app.use('/auth', authRoutes)
 app.use(messageRoutes)
-app.use(conversationController)
+app.use(conversationRoutes)
 
 app.get('/health-check', (req: Request, res: Response, next: NextFunction) => {
   return res.status(200).json({
