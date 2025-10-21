@@ -3,16 +3,8 @@ import { Request, Response } from 'express'
 import Conversation from '../models/conversation'
 
 export const getConversations = async (req: Request, res: Response) => {
-  const userId: string = req.query.userId as string
-
-  if (!userId) {
-    return res.status(400).json({
-      errorMessage: 'userId query parameter is required.',
-    })
-  }
-
   try {
-    const conversations = await Conversation.findByUserId(userId)
+    const conversations = await Conversation.findByUserId(req.userId!)
 
     return res.status(200).json({
       conversations: conversations.map((convo) => ({

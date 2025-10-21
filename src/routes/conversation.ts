@@ -1,11 +1,16 @@
 import { Router } from 'express'
 
 import * as conversationController from '../controllers/conversation'
-import { authentication } from '../middleware/auth'
+import { authentication, authorization } from '../middleware/auth'
 
 const router = Router()
 
-router.get('/conversations', conversationController.getConversations)
+router.get(
+  '/conversations',
+  authentication,
+  authorization, // Authorization is required; getConversations function needs req.userId
+  conversationController.getConversations
+)
 
 router.get('/conversations/:convoId', conversationController.getConversation)
 
