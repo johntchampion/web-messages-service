@@ -1,13 +1,40 @@
 import http from 'http'
-import { Server } from 'socket.io'
+import { Server, Socket } from 'socket.io'
+import jwt from 'jsonwebtoken'
 
 import Message, { ContentType } from '../models/message'
 import Conversation from '../models/conversation'
+import User from '../models/user'
+import { AuthToken } from '../models/user'
 
 /**
  * The object used to emit information to sockets.
  */
 let io: Server
+
+/**
+ * Authenticates a socket event by verifying the provided JWT token.
+ * @param token JWT token to verify
+ * @returns Object containing userId and verified status, or null if invalid
+ */
+const authenticateSocketEvent = (
+  token?: string
+): { userId: string; verified: boolean } | null => {
+  if (!token) return null
+
+  try {
+    const decodedToken = jwt.verify(
+      token,
+      process.env.TOKEN_SECRET as string
+    ) as AuthToken
+    return {
+      userId: decodedToken.userId,
+      verified: decodedToken.verified,
+    }
+  } catch (error) {
+    return null
+  }
+}
 
 /**
  * This function must be run as early as possible, or socket-based updates will not work.
@@ -23,110 +50,436 @@ export const setupSocketIO = (server: http.Server) => {
     },
   })
 
-  io.on('connection', (socket) => {
-    // Get messages
-    socket.on('get-messages', async ({ convoId }) => {
+  io.on('connection', (socket: Socket) => {
+    // ==================== MESSAGE EVENTS ====================
+
+    /**
+     * List messages in a conversation with cursor-based pagination.
+     * REST equivalent: GET /messages
+     * Params: { convoId, limit?, before?, after?, order?, token? }
+     */
+    socket.on('list-messages', async (params) => {
+      const { convoId, limit, before, after, order, token } = params
+
       if (!convoId) {
-        socket.emit('error', 'Sending a message requires a convoId.')
+        socket.emit('error', {
+          event: 'list-messages',
+          message: 'Conversation ID is required.',
+        })
         return
       }
 
       try {
         const conversation = await Conversation.findById(convoId)
-        const messages = await Message.listByConversation(convoId, {
-          limit: 50,
+        const result = await Message.listByConversation(convoId, {
+          limit: limit ? parseInt(limit) : undefined,
+          before,
+          after,
+          order,
         })
-        socket.emit('messages', {
-          messages,
-          conversation,
-          deletionDate: conversation.getDeletionDate(),
+
+        socket.emit('response', {
+          event: 'list-messages',
+          data: {
+            messages: result.messages,
+            pageInfo: result.pageInfo,
+            conversation,
+            deletionDate: conversation.getDeletionDate(),
+          },
         })
       } catch (error) {
-        socket.emit(
-          'error',
-          error ? error.toString() : 'There was an error getting the messages.'
-        )
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'There was an error getting the messages.'
+        socket.emit('error', {
+          event: 'list-messages',
+          message,
+        })
       }
     })
 
-    // Send a message.
-    socket.on(
-      'send-message',
-      async ({ convoId, content, userName, userAvatar }) => {
-        if (!convoId || !content || !userName || !userAvatar) {
-          socket.emit(
-            'error',
-            'Sending a message requires both convoId and content values.'
-          )
-          return
-        }
+    /**
+     * Create/send a new message.
+     * REST equivalent: POST /message
+     * Params: { convoId, content, userName?, userAvatar?, token? }
+     */
+    socket.on('create-message', async (params) => {
+      const { convoId, content, userName, userAvatar, token } = params
 
-        try {
-          const newMessage = new Message({
-            convoId: convoId,
-            content: content,
-            type: 'text',
-            senderName: userName,
-            senderAvatar: userAvatar,
-          })
-          await newMessage.update()
-          socket.emit('response', {
-            event: 'send-message',
-            message: newMessage,
-          })
-          updateConversation(convoId, newMessage)
-        } catch (_) {
-          socket.emit('error', 'There was an error sending the message.')
-        }
-      }
-    )
-
-    // Create a conversation.
-    socket.on('create-conversation', async ({ name }) => {
-      if (!name) {
-        socket.emit('error', 'Creating a conversation requires a name.')
+      if (!convoId || !content) {
+        socket.emit('error', {
+          event: 'create-message',
+          message: 'Conversation ID and content are required.',
+        })
         return
       }
 
       try {
-        const newConversation = new Conversation({ name: name })
-        await newConversation.update()
-        socket.emit('response', {
-          event: 'create-conversation',
-          conversation: newConversation,
-          deletionDate: newConversation.getDeletionDate(),
+        const auth = authenticateSocketEvent(token)
+        const user = auth ? await User.findById(auth.userId) : null
+
+        const newMessage = new Message({
+          convoId,
+          content,
+          type: 'text',
+          senderId: user ? user.id : null,
+          senderName: user ? null : userName,
+          senderAvatar: user ? null : userAvatar,
         })
-      } catch (_) {
-        socket.emit('error', 'There was an error creating the conversation.')
+        await newMessage.create()
+
+        socket.emit('response', {
+          event: 'create-message',
+          data: { message: newMessage },
+        })
+
+        // Broadcast to all clients in the conversation room
+        socket.to(convoId).emit('message-created', {
+          convoId,
+          message: newMessage,
+        })
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'There was an error sending the message.'
+        socket.emit('error', {
+          event: 'create-message',
+          message,
+        })
       }
     })
 
-    // Delete a conversation.
-    socket.on('delete-conversation', async ({ convoId }) => {
+    // ==================== CONVERSATION EVENTS ====================
+
+    /**
+     * List all conversations for authenticated user.
+     * REST equivalent: GET /conversations
+     * Params: { token }
+     */
+    socket.on('list-conversations', async (params) => {
+      const { token } = params
+
+      const auth = authenticateSocketEvent(token)
+      if (!auth) {
+        socket.emit('error', {
+          event: 'list-conversations',
+          message: 'Authentication required.',
+        })
+        return
+      }
+
+      try {
+        const conversations = await Conversation.findByUserId(auth.userId)
+
+        socket.emit('response', {
+          event: 'list-conversations',
+          data: {
+            conversations: conversations.map((convo) => ({
+              ...convo,
+              deletionDate: convo.getDeletionDate(),
+            })),
+          },
+        })
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'There was an error getting the conversations.'
+        socket.emit('error', {
+          event: 'list-conversations',
+          message,
+        })
+      }
+    })
+
+    /**
+     * Get a single conversation by ID.
+     * REST equivalent: GET /conversations/:convoId
+     * Params: { convoId }
+     */
+    socket.on('get-conversation', async (params) => {
+      const { convoId } = params
+
       if (!convoId) {
-        socket.emit('error', 'Deleting a conversation requires a convoId.')
+        socket.emit('error', {
+          event: 'get-conversation',
+          message: 'Conversation ID is required.',
+        })
+        return
+      }
+
+      try {
+        const conversation = await Conversation.findById(convoId)
+
+        socket.emit('response', {
+          event: 'get-conversation',
+          data: {
+            conversation,
+            deletionDate: conversation.getDeletionDate(),
+          },
+        })
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'There was an error getting the conversation.'
+        socket.emit('error', {
+          event: 'get-conversation',
+          message,
+        })
+      }
+    })
+
+    /**
+     * Create a new conversation.
+     * REST equivalent: POST /conversations
+     * Params: { name, token? }
+     */
+    socket.on('create-conversation', async (params) => {
+      const { name, token } = params
+
+      if (!name) {
+        socket.emit('error', {
+          event: 'create-conversation',
+          message: 'A conversation name is required.',
+        })
+        return
+      }
+
+      try {
+        const auth = authenticateSocketEvent(token)
+
+        const newConversation = new Conversation({
+          name,
+          creatorId: auth ? auth.userId : null,
+        })
+        await newConversation.update()
+
+        socket.emit('response', {
+          event: 'create-conversation',
+          data: {
+            conversation: newConversation,
+            deletionDate: newConversation.getDeletionDate(),
+          },
+        })
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'There was an error creating the conversation.'
+        socket.emit('error', {
+          event: 'create-conversation',
+          message,
+        })
+      }
+    })
+
+    /**
+     * Update a conversation's name.
+     * REST equivalent: PUT /conversations/:convoId
+     * Params: { convoId, name, token? }
+     */
+    socket.on('update-conversation', async (params) => {
+      const { convoId, name, token } = params
+
+      if (!convoId) {
+        socket.emit('error', {
+          event: 'update-conversation',
+          message: 'Conversation ID is required.',
+        })
+        return
+      }
+
+      if (!name || name.length < 1) {
+        socket.emit('error', {
+          event: 'update-conversation',
+          message: 'A conversation name is required.',
+        })
+        return
+      }
+
+      try {
+        const conversation = await Conversation.findById(convoId)
+        const auth = authenticateSocketEvent(token)
+
+        // If conversation has a creator, only that creator can update it
+        if (
+          conversation.creatorId !== null &&
+          conversation.creatorId !== auth?.userId
+        ) {
+          socket.emit('error', {
+            event: 'update-conversation',
+            message: 'Only the creator can update this conversation.',
+          })
+          return
+        }
+
+        conversation.name = name
+        await conversation.update()
+
+        socket.emit('response', {
+          event: 'update-conversation',
+          data: {
+            conversation,
+            deletionDate: conversation.getDeletionDate(),
+          },
+        })
+
+        // Broadcast update to all clients in the conversation room
+        socket.to(convoId).emit('conversation-updated', {
+          conversation,
+          deletionDate: conversation.getDeletionDate(),
+        })
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'There was an error updating the conversation.'
+        socket.emit('error', {
+          event: 'update-conversation',
+          message,
+        })
+      }
+    })
+
+    /**
+     * Delete a conversation.
+     * REST equivalent: DELETE /conversations/:convoId
+     * Params: { convoId }
+     */
+    socket.on('delete-conversation', async (params) => {
+      const { convoId } = params
+
+      if (!convoId) {
+        socket.emit('error', {
+          event: 'delete-conversation',
+          message: 'Conversation ID is required.',
+        })
         return
       }
 
       try {
         const conversation = await Conversation.findById(convoId)
         await conversation.delete()
+
         socket.emit('response', {
           event: 'delete-conversation',
-          conversation: conversation,
+          data: { success: true },
         })
-      } catch (_) {
-        socket.emit('error', 'There was an error deleting the conversation.')
+
+        // Broadcast deletion to all clients in the conversation room
+        socket.to(convoId).emit('conversation-deleted', {
+          convoId,
+        })
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'There was an error deleting the conversation.'
+        socket.emit('error', {
+          event: 'delete-conversation',
+          message,
+        })
+      }
+    })
+
+    // ==================== ROOM MANAGEMENT ====================
+
+    /**
+     * Join a conversation room to receive real-time updates.
+     * Params: { convoId }
+     */
+    socket.on('join-conversation', async (params) => {
+      const { convoId } = params
+
+      if (!convoId) {
+        socket.emit('error', {
+          event: 'join-conversation',
+          message: 'Conversation ID is required.',
+        })
+        return
+      }
+
+      try {
+        await socket.join(convoId)
+        socket.emit('response', {
+          event: 'join-conversation',
+          data: { convoId, joined: true },
+        })
+      } catch (error) {
+        socket.emit('error', {
+          event: 'join-conversation',
+          message: 'There was an error joining the conversation.',
+        })
+      }
+    })
+
+    /**
+     * Leave a conversation room to stop receiving real-time updates.
+     * Params: { convoId }
+     */
+    socket.on('leave-conversation', async (params) => {
+      const { convoId } = params
+
+      if (!convoId) {
+        socket.emit('error', {
+          event: 'leave-conversation',
+          message: 'Conversation ID is required.',
+        })
+        return
+      }
+
+      try {
+        await socket.leave(convoId)
+        socket.emit('response', {
+          event: 'leave-conversation',
+          data: { convoId, left: true },
+        })
+      } catch (error) {
+        socket.emit('error', {
+          event: 'leave-conversation',
+          message: 'There was an error leaving the conversation.',
+        })
       }
     })
   })
 }
 
 /**
- * Sends an update to each participant in a conversation where a message was just sent.
- * @param convoId Participants of this conversation will be sent an update.
- * @param message The message content of the update.
+ * Broadcasts a message to all participants in a conversation room.
+ * @param convoId The conversation room to broadcast to.
+ * @param message The message to broadcast.
  */
-export const updateConversation = (convoId: string, message: Message) => {
-  io?.emit(convoId, message)
+export const broadcastMessage = (convoId: string, message: Message) => {
+  io?.to(convoId).emit('message-created', {
+    convoId,
+    message,
+  })
+}
+
+/**
+ * Broadcasts a conversation update to all participants in a conversation room.
+ * @param convoId The conversation room to broadcast to.
+ * @param conversation The updated conversation.
+ */
+export const broadcastConversationUpdate = (
+  convoId: string,
+  conversation: Conversation
+) => {
+  io?.to(convoId).emit('conversation-updated', {
+    conversation,
+    deletionDate: conversation.getDeletionDate(),
+  })
+}
+
+/**
+ * Broadcasts a conversation deletion to all participants in a conversation room.
+ * @param convoId The conversation room to broadcast to.
+ */
+export const broadcastConversationDeletion = (convoId: string) => {
+  io?.to(convoId).emit('conversation-deleted', {
+    convoId,
+  })
 }
