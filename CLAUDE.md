@@ -22,6 +22,18 @@ npm run build
 
 # Production mode (requires build first)
 npm start
+
+# Run unit tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run tests with coverage report
+npm run test:coverage
+
+# Run tests with verbose output
+npm run test:verbose
 ```
 
 ## Docker
@@ -217,7 +229,52 @@ Models use partial updates - only fields present in the patch object are updated
 
 ### Testing
 
-No test runner currently configured (`npm test` returns error). When adding tests, ensure `NODE_ENV=test` to prevent emails from being sent.
+The project uses Jest with ts-jest for unit testing. All tests are located in `src/__tests__/` directory.
+
+**Test Organization:**
+
+- `src/__tests__/models/` - Unit tests for User, Message, and Conversation models
+- `src/__tests__/middleware/` - Unit tests for authentication and authorization middleware
+- `src/__tests__/util/` - Unit tests for utility functions like RequestError
+- `src/__tests__/helpers/` - Test helper utilities and mock factories
+- `src/__tests__/setup.ts` - Global test setup (runs before all tests)
+
+**Running Tests:**
+
+```bash
+npm test                 # Run all tests
+npm run test:watch       # Run tests in watch mode
+npm run test:coverage    # Run tests with coverage report
+npm run test:verbose     # Run tests with verbose output
+```
+
+**Test Coverage:**
+
+Current test coverage (128 tests):
+- Models: 93.77% statement coverage
+- Authentication middleware: 100% coverage
+- RequestError utility: 100% coverage
+
+**Writing Tests:**
+
+- All tests use Jest's mocking capabilities to avoid database dependencies
+- Database queries are mocked using `jest.mock('../../util/db')`
+- Use helper functions in `src/__tests__/helpers/db-mock.ts` for creating mock data
+- Tests follow AAA pattern: Arrange, Act, Assert
+- `NODE_ENV=test` is automatically set to prevent emails from being sent
+
+**Test Utilities:**
+
+- `createMockQueryResult<T>(rows, rowCount)` - Creates mock pg QueryResult
+- `createMockUserRow(overrides)` - Creates mock user database row
+- `createMockMessageRow(overrides)` - Creates mock message database row
+- `createMockConversationRow(overrides)` - Creates mock conversation database row
+
+**Configuration:**
+
+- `jest.config.js` - Jest configuration with ts-jest preset
+- `tsconfig.json` - TypeScript configured with Jest types
+- Coverage reports are generated in `coverage/` directory (gitignored)
 
 ### Message Content Validation
 
