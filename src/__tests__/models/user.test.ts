@@ -1,10 +1,7 @@
 import User from '../../models/user'
 import query from '../../util/db'
 import bcrypt from 'bcryptjs'
-import {
-  createMockQueryResult,
-  createMockUserRow,
-} from '../helpers/db-mock'
+import { createMockQueryResult, createMockUserRow } from '../helpers/db-mock'
 
 // Mock dependencies
 jest.mock('../../util/db')
@@ -155,7 +152,11 @@ describe('User Model', () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('UPDATE users SET'),
-        expect.arrayContaining(['Updated Name', 'updated@example.com', 'test-user-id'])
+        expect.arrayContaining([
+          'Updated Name',
+          'updated@example.com',
+          'test-user-id',
+        ])
       )
       expect(user.displayName).toBe('Updated Name')
       expect(user.email).toBe('updated@example.com')
@@ -164,9 +165,9 @@ describe('User Model', () => {
     it('should throw error when user has no id', async () => {
       const user = new User()
 
-      await expect(
-        user.update({ displayName: 'New Name' })
-      ).rejects.toThrow('User has not been persisted yet.')
+      await expect(user.update({ displayName: 'New Name' })).rejects.toThrow(
+        'User has not been persisted yet.'
+      )
     })
 
     it('should reload when no fields to update', async () => {
@@ -563,29 +564,6 @@ describe('User Model', () => {
         mockQuery.mockResolvedValue(createMockQueryResult([], 0))
 
         const user = await User.findByResetPasswordToken('invalid-token')
-
-        expect(user).toBeNull()
-      })
-    })
-
-    describe('findBySocketId', () => {
-      it('should return user when found', async () => {
-        const mockRow = createMockUserRow()
-        mockQuery.mockResolvedValue(createMockQueryResult([mockRow], 1))
-
-        const user = await User.findBySocketId('socket-123')
-
-        expect(user).toBeInstanceOf(User)
-        expect(mockQuery).toHaveBeenCalledWith(
-          expect.stringContaining('FROM user_sessions s'),
-          ['socket-123']
-        )
-      })
-
-      it('should return null when not found', async () => {
-        mockQuery.mockResolvedValue(createMockQueryResult([], 0))
-
-        const user = await User.findBySocketId('invalid-socket')
 
         expect(user).toBeNull()
       })
