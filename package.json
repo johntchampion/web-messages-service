@@ -1,36 +1,44 @@
 {
   "name": "web-messages-service",
   "version": "1.0.0",
-  "description": "Back-end service to support a messaging app.",
+  "description": "Backend service to support a messaging app.",
   "main": "index.js",
   "scripts": {
     "build": "tsc",
     "dev": "nodemon --watch \"src/**\" --ext \"ts,json\" --ignore \"src/**/*.spec.ts\" --exec \"ts-node src/index.ts\"",
     "start": "node ./dist/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:verbose": "jest --verbose"
   },
   "author": "John Champion",
   "license": "ISC",
   "devDependencies": {
-    "@types/express": "^4.17.21",
-    "nodemon": "^3.0.3",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.3.3"
-  },
-  "dependencies": {
+    "@types/express": "^5.0.4",
+    "@types/jest": "^30.0.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^2.0.0",
-    "@types/pg": "^8.11.0",
+    "@types/pg": "^8.15.5",
+    "@types/supertest": "^6.0.3",
+    "jest": "^30.2.0",
+    "nodemon": "^3.1.10",
+    "supertest": "^7.1.4",
+    "ts-jest": "^29.4.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
     "axios": "^1.12.2",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
-    "cron": "^3.1.7",
-    "dotenv": "^16.4.5",
-    "express": "^4.18.2",
-    "express-validator": "^7.2.1",
+    "cron": "^4.3.3",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "express-validator": "^7.3.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
-    "pg": "^8.11.3",
-    "socket.io": "^4.7.4"
+    "pg": "^8.16.3",
+    "socket.io": "^4.8.1"
   }
 }

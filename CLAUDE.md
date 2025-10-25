@@ -22,6 +22,18 @@ npm run build
 
 # Production mode (requires build first)
 npm start
+
+# Run unit tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run tests with coverage report
+npm run test:coverage
+
+# Run tests with verbose output
+npm run test:verbose
 ```
 
 ## Docker
@@ -217,7 +229,53 @@ Models use partial updates - only fields present in the patch object are updated
 
 ### Testing
 
-No test runner currently configured (`npm test` returns error). When adding tests, ensure `NODE_ENV=test` to prevent emails from being sent.
+The project uses Jest with ts-jest for unit testing. All tests are located in `src/__tests__/` directory.
+
+**Test Organization:**
+
+- `src/__tests__/models/` - Unit tests for User, Message, and Conversation models
+- `src/__tests__/middleware/` - Unit tests for authentication and authorization middleware
+- `src/__tests__/util/` - Unit tests for utility functions like RequestError
+- `src/__tests__/helpers/` - Test helper utilities and mock factories
+- `src/__tests__/setup.ts` - Global test setup (runs before all tests)
+
+**Running Tests:**
+
+```bash
+npm test                 # Run all tests
+npm run test:watch       # Run tests in watch mode
+npm run test:coverage    # Run tests with coverage report
+npm run test:verbose     # Run tests with verbose output
+```
+
+**Test Coverage:**
+
+Current test coverage (131 tests):
+
+- Models: 93.77% statement coverage
+- Authentication middleware: 100% coverage
+- RequestError utility: 100% coverage
+
+**Writing Tests:**
+
+- All tests use Jest's mocking capabilities to avoid database dependencies
+- Database queries are mocked using `jest.mock('../../util/db')`
+- Use helper functions in `src/__tests__/helpers/db-mock.ts` for creating mock data
+- Tests follow AAA pattern: Arrange, Act, Assert
+- `NODE_ENV=test` is automatically set to prevent emails from being sent
+
+**Test Utilities:**
+
+- `createMockQueryResult<T>(rows, rowCount)` - Creates mock pg QueryResult
+- `createMockUserRow(overrides)` - Creates mock user database row
+- `createMockMessageRow(overrides)` - Creates mock message database row
+- `createMockConversationRow(overrides)` - Creates mock conversation database row
+
+**Configuration:**
+
+- `jest.config.js` - Jest configuration with ts-jest preset
+- `tsconfig.json` - TypeScript configured with Jest types
+- Coverage reports are generated in `coverage/` directory (gitignored)
 
 ### Message Content Validation
 
@@ -226,129 +284,3 @@ Messages have a 4096-byte limit (validated in-memory before database insert to f
 ### Conversation Lifecycle
 
 Conversations are soft-expired based on `updated_at` timestamp. The cron job permanently deletes conversations (and cascades to messages) after 30 days of inactivity.
-
-## Planned Features & Future Work
-
-### User-Conversation Ownership Tracking
-
-**Database Changes:**
-
-- Add `creator_id` column to `conversations` table (nullable UUID, foreign key to `users.user_id`)
-- This allows tracking which user created each conversation
-- Nullable to support existing anonymous conversations
-
-**Model Updates (Conversation):**
-
-- Add `creatorId?: string | null` property to `Conversation` class
-- Update `constructor()` to accept `creatorId` in config
-- Update `update()` to handle `creator_id` column in INSERT/UPDATE
-- Update `parseRow()` to map `creator_id` to `creatorId`
-- Add new static method: `findByUserId(userId: string): Promise<Conversation[]>` to query all conversations created by a user
-- Update `create()` logic to set `creator_id` when user is authenticated
-
-**Controller Updates:**
-
-- Update conversation creation endpoints to accept optional `userId` from authenticated requests
-- Add new controller function to get conversations by user ID
-
-**REST API Endpoints to Add:**
-
-- `GET /conversations` - List all conversations created by authenticated user (requires auth middleware)
-- `GET /conversations/:id` - Get single conversation by ID
-- `POST /conversations` - Create new conversation (optionally authenticated to set creator)
-- `PUT /conversations/:id` - Update conversation name (requires auth, only creator can update)
-- `DELETE /conversations/:id` - Delete conversation (optionally require creator ownership)
-
-**Routes File:**
-
-- Create `src/routes/conversation.ts` with route definitions
-- Apply `authentication` middleware to track creator on POST
-- Apply `authorization` middleware for user-specific queries (GET /conversations)
-- Use `express-validator` for input validation
-
-### Socket.IO Feature Parity with REST API
-
-Currently, Socket.IO handles conversations and messages, but lacks feature parity with REST endpoints. Need to expand Socket.IO functionality:
-
-**New Socket Events to Implement:**
-
-**Messages:**
-
-- `list-messages` - Get paginated message list with cursor support (params: `{ convoId, limit?, before?, after?, order? }`)
-  - Response: `{ messages: Message[], pageInfo: { hasMore, nextBefore?, nextAfter? } }`
-- `update-message` - Edit existing message content (params: `{ messageId, content }`)
-- `delete-message` - Delete a message (params: `{ messageId }`)
-
-**Conversations:**
-
-- `list-conversations` - Get all conversations for authenticated user (params: `{ userId? }`)
-  - For authenticated users, return their created conversations
-  - For anonymous, could return recently accessed or all public conversations
-- `get-conversation` - Get single conversation details (params: `{ convoId }`)
-- `update-conversation` - Update conversation name (params: `{ convoId, name }`)
-
-**Socket Authentication:**
-
-- Socket.IO currently doesn't handle authentication (no JWT verification)
-- To implement authenticated Socket events:
-  1. Accept `token` parameter in socket handshake or event payloads
-  2. Create helper function `authenticateSocketEvent(token)` that verifies JWT and returns `{ userId, verified }`
-  3. For user-specific operations (list-conversations, update-message), verify token and check ownership
-  4. For anonymous operations, allow without token but don't set `creator_id`
-
-**Implementation Pattern:**
-
-- Each socket event handler should follow similar structure to REST controllers
-- Validate input parameters
-- Handle authentication if required
-- Call appropriate model methods
-- Emit response or error
-- For mutations (create, update, delete), broadcast updates to relevant rooms
-
-**Room Management:**
-
-- Currently, updates are emitted to `convoId` room, but clients don't explicitly join rooms
-- Consider having clients join conversation rooms: `socket.join(convoId)`
-- Emit updates only to sockets in the conversation room
-- When user creates/joins conversation, have them join the room
-- When conversation is deleted, clear the room
-
-**Error Handling:**
-
-- Standardize socket error responses: `socket.emit('error', { event: 'original-event-name', message: 'error description' })`
-- Ensure all async errors are caught and emitted back to client
-
-### Migration Path
-
-When implementing these features:
-
-1. **Database Migration First:**
-
-   - Add `creator_id` column to conversations table
-   - Update database schema repository (https://github.com/appdevjohn/web-messages-db)
-
-2. **Model Layer:**
-
-   - Update `Conversation` model with new properties and methods
-   - Ensure backward compatibility with existing null `creator_id` values
-
-3. **REST API:**
-
-   - Create conversation routes file
-   - Implement controllers for CRUD operations
-   - Add route registrations to `src/index.ts`
-   - Test endpoints with authenticated and anonymous users
-
-4. **Socket.IO Expansion:**
-
-   - Add authentication helper for socket events
-   - Implement new socket event handlers in `src/util/io.ts`
-   - Update existing handlers to use creator_id when available
-   - Implement room management for better event targeting
-   - Update frontend to use new socket events
-
-5. **Testing:**
-   - Add tests for user-conversation ownership
-   - Test authenticated vs anonymous conversation creation
-   - Verify authorization checks (only creator can update/delete)
-   - Test socket authentication and event handling

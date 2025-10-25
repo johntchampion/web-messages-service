@@ -325,22 +325,6 @@ export default class User implements Account {
     return r.rowCount ? User.parseRow(r.rows[0]) : null
   }
 
-  /**
-   * Uses the new user_sessions table (socket_id moved out of users).
-   */
-  static async findBySocketId(socketId: string): Promise<User | null> {
-    const r = await query(
-      `
-      SELECT u.*
-      FROM user_sessions s
-      JOIN users u ON u.user_id = s.user_id
-      WHERE s.socket_id = $1
-      `,
-      [socketId]
-    )
-    return r.rowCount ? User.parseRow(r.rows[0]) : null
-  }
-
   // ---------- Row mapping ----------
 
   static parseRow(row: any): User {
