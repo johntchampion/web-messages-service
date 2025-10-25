@@ -1,6 +1,7 @@
 import User from '../../models/user'
 import query from '../../util/db'
 import bcrypt from 'bcryptjs'
+import sendEmail from '../../util/mail'
 import { createMockQueryResult, createMockUserRow } from '../helpers/db-mock'
 
 // Mock dependencies
@@ -8,10 +9,12 @@ jest.mock('../../util/db')
 jest.mock('../../util/mail', () => jest.fn())
 
 const mockQuery = query as jest.MockedFunction<typeof query>
+const mockSendEmail = sendEmail as jest.MockedFunction<typeof sendEmail>
 
 describe('User Model', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockSendEmail.mockResolvedValue({} as any)
   })
 
   describe('constructor', () => {
@@ -581,6 +584,99 @@ describe('User Model', () => {
       expect(user.username).toBe('testuser')
       expect(user.displayName).toBe('Test User')
       expect(user.verified).toBe(false)
+    })
+  })
+
+  describe('sendVerificationEmail', () => {
+    it('should send verification email when required fields exist', async () => {
+      const user = new User({
+        email: 'test@example.com',
+        username: 'testuser',
+        verifyToken: '123456',
+      })
+
+      await expect(user.sendVerificationEmail()).resolves.toBeDefined()
+
+      expect(mockSendEmail).toHaveBeenCalledWith(
+        'test@example.com',
+        'testuser',
+        'Your Verification Code',
+        expect.stringContaining('123456')
+      )
+    })
+
+    it('should reject when required fields are missing', async () => {
+      const user = new User({ email: 'test@example.com' })
+
+      await expect(user.sendVerificationEmail()).rejects.toThrow(
+        'Missing email, username, or verification token.'
+      )
+
+      expect(mockSendEmail).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('sendPasswordResetEmail', () => {
+    const originalAppBaseUrl = process.env.APP_BASE_URL
+
+    afterEach(() => {
+      if (originalAppBaseUrl) {
+        process.env.APP_BASE_URL = originalAppBaseUrl
+      } else {
+        delete process.env.APP_BASE_URL
+      }
+    })
+
+    it('should send password reset email using APP_BASE_URL when available', async () => {
+      process.env.APP_BASE_URL = 'https://example.com'
+
+      const user = new User({
+        email: 'reset@example.com',
+        username: 'resetuser',
+        resetPasswordToken: 'reset-token-123',
+      })
+
+      await expect(user.sendPasswordResetEmail()).resolves.toBeDefined()
+
+      expect(mockSendEmail).toHaveBeenCalledWith(
+        'reset@example.com',
+        'resetuser',
+        'Reset Password',
+        expect.stringContaining(
+          'https://example.com/auth/reset-password/reset-token-123'
+        )
+      )
+    })
+
+    it('should fall back to localhost when APP_BASE_URL is not set', async () => {
+      delete process.env.APP_BASE_URL
+
+      const user = new User({
+        email: 'reset@example.com',
+        username: 'resetuser',
+        resetPasswordToken: 'reset-token-123',
+      })
+
+      await expect(user.sendPasswordResetEmail()).resolves.toBeDefined()
+
+      expect(mockSendEmail).toHaveBeenCalledWith(
+        'reset@example.com',
+        'resetuser',
+        'Reset Password',
+        expect.stringContaining(
+          'http://localhost:3000/auth/reset-password/reset-token-123'
+        )
+      )
+    })
+
+    it('should reject when required fields are missing', async () => {
+      const user = new User({ email: 'reset@example.com' })
+
+      await expect(user.sendPasswordResetEmail()).rejects.toThrow(
+        'Missing email, username, or reset token.'
+      )
+
+      expect(mockSendEmail).not.toHaveBeenCalled()
     })
   })
 })
