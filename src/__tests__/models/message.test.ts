@@ -1,9 +1,6 @@
 import Message from '../../models/message'
 import query from '../../util/db'
-import {
-  createMockQueryResult,
-  createMockMessageRow,
-} from '../helpers/db-mock'
+import { createMockQueryResult, createMockMessageRow } from '../helpers/db-mock'
 
 jest.mock('../../util/db')
 
@@ -60,7 +57,14 @@ describe('Message Model', () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO messages'),
-        expect.arrayContaining(['convo-123', null, 'text', 'Test message', null, null])
+        expect.arrayContaining([
+          'convo-123',
+          null,
+          'text',
+          'Test message',
+          null,
+          null,
+        ])
       )
       expect(message.id).toBe('test-message-id-123')
       expect(message.createdAt).toBeDefined()
@@ -69,7 +73,6 @@ describe('Message Model', () => {
     it('should create message with sender information', async () => {
       const mockRow = createMockMessageRow({
         sender_id: 'user-123',
-        sender_name: 'John Doe',
       })
       mockQuery.mockResolvedValue(createMockQueryResult([mockRow], 1))
 
@@ -78,14 +81,13 @@ describe('Message Model', () => {
         type: 'text',
         content: 'Test message',
         senderId: 'user-123',
-        senderName: 'John Doe',
       })
 
       await message.create()
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO messages'),
-        expect.arrayContaining(['user-123', 'John Doe'])
+        expect.arrayContaining(['user-123'])
       )
     })
 
@@ -128,7 +130,9 @@ describe('Message Model', () => {
         content: 'Test',
       })
 
-      await expect(message.create()).rejects.toThrow('Failed to insert message.')
+      await expect(message.create()).rejects.toThrow(
+        'Failed to insert message.'
+      )
     })
 
     it('should throw error when insert returns no rows', async () => {
@@ -140,7 +144,9 @@ describe('Message Model', () => {
         content: 'Test',
       })
 
-      await expect(message.create()).rejects.toThrow('Failed to insert message.')
+      await expect(message.create()).rejects.toThrow(
+        'Failed to insert message.'
+      )
     })
   })
 
@@ -308,7 +314,9 @@ describe('Message Model', () => {
         content: 'Test',
       })
 
-      await expect(message.reload()).rejects.toThrow('Could not reload message.')
+      await expect(message.reload()).rejects.toThrow(
+        'Could not reload message.'
+      )
     })
   })
 
@@ -338,7 +346,9 @@ describe('Message Model', () => {
         content: 'Test',
       })
 
-      await expect(message.delete()).rejects.toThrow('This user does not exist.')
+      await expect(message.delete()).rejects.toThrow(
+        'This user does not exist.'
+      )
     })
   })
 
@@ -400,7 +410,10 @@ describe('Message Model', () => {
       const mockRows = Array(11)
         .fill(null)
         .map((_, i) =>
-          createMockMessageRow({ message_id: `msg-${i}`, content: `Message ${i}` })
+          createMockMessageRow({
+            message_id: `msg-${i}`,
+            content: `Message ${i}`,
+          })
         )
       mockQuery.mockResolvedValue(createMockQueryResult(mockRows, 11))
 
