@@ -250,7 +250,7 @@ npm run test:verbose     # Run tests with verbose output
 
 **Test Coverage:**
 
-Current test coverage (126 tests):
+Current test coverage (131 tests):
 
 - Models: 93.77% statement coverage
 - Authentication middleware: 100% coverage
