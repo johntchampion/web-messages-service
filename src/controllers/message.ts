@@ -118,7 +118,9 @@ export const createMessage = async (req: Request, res: Response) => {
       message: {
         ...newMessage,
         senderName: user ? user.displayName : newMessage.senderName,
-        senderAvatar: user ? user.profilePicURL : newMessage.senderAvatar,
+        senderAvatar: user
+          ? getUploadURL(user.profilePicURL)
+          : newMessage.senderAvatar,
       },
     })
   } catch (error) {

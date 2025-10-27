@@ -6,6 +6,7 @@ import Message, { ContentType } from '../models/message'
 import Conversation from '../models/conversation'
 import User from '../models/user'
 import { AuthToken } from '../models/user'
+import { getUploadURL } from './upload'
 
 /**
  * The object used to emit information to sockets.
@@ -78,10 +79,62 @@ export const setupSocketIO = (server: http.Server) => {
           order,
         })
 
+        // Extract unique sender IDs from messages
+        const senderIds = Array.from(
+          new Set(
+            result.messages
+              .filter((msg) => msg.senderId)
+              .map((msg) => msg.senderId!)
+          )
+        )
+
+        // Fetch user details for all sender IDs
+        const userMap = new Map<
+          string,
+          { displayName: string; profilePicURL: string | null }
+        >()
+        if (senderIds.length > 0) {
+          const users = await Promise.all(
+            senderIds.map((id) => User.findById(id))
+          )
+          users.forEach((user) => {
+            if (user && user.id) {
+              userMap.set(user.id, {
+                displayName: user.displayName || '',
+                profilePicURL: getUploadURL(user.profilePicURL),
+              })
+            }
+          })
+        }
+
+        // Enrich messages with sender details
+        const enrichedMessages = result.messages.map((msg) => {
+          const messageData: any = {
+            id: msg.id,
+            createdAt: msg.createdAt,
+            updatedAt: msg.updatedAt,
+            convoId: msg.convoId,
+            senderId: msg.senderId,
+            type: msg.type,
+            content: msg.content,
+            senderName: msg.senderName,
+            senderAvatar: msg.senderAvatar,
+          }
+
+          // Add user details if this message has a senderId
+          if (msg.senderId && userMap.has(msg.senderId)) {
+            const userData = userMap.get(msg.senderId)!
+            messageData.senderName = userData.displayName
+            messageData.senderAvatar = userData.profilePicURL
+          }
+
+          return messageData
+        })
+
         socket.emit('response', {
           event: 'list-messages',
           data: {
-            messages: result.messages,
+            messages: enrichedMessages,
             pageInfo: result.pageInfo,
             conversation,
             deletionDate: conversation.getDeletionDate(),
@@ -129,15 +182,23 @@ export const setupSocketIO = (server: http.Server) => {
         })
         await newMessage.create()
 
+        const messageResponse = {
+          ...newMessage,
+          senderName: user ? user.displayName : newMessage.senderName,
+          senderAvatar: user
+            ? getUploadURL(user.profilePicURL)
+            : newMessage.senderAvatar,
+        }
+
         socket.emit('response', {
           event: 'create-message',
-          data: { message: newMessage },
+          data: { message: messageResponse },
         })
 
         // Broadcast to all clients in the conversation room
         socket.to(convoId).emit('message-created', {
           convoId,
-          message: newMessage,
+          message: messageResponse,
         })
       } catch (error) {
         const message =
