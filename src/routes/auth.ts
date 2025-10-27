@@ -10,7 +10,7 @@ router.get('/ping', authentication, authorization, authController.ping)
 
 router.put(
   '/login',
-  body('email').isEmail().withMessage('A valid email address is required.'),
+  body('username').isLength({ min: 1 }).withMessage('A username is required.'),
   body('password').isLength({ min: 1 }).withMessage('A password is required.'),
   authController.logIn
 )
@@ -25,7 +25,10 @@ router.post(
     .withMessage('A username is required.')
     .isAlphanumeric()
     .withMessage('Username must contain only letters and numbers.'),
-  body('email').isEmail().withMessage('Email address must be valid.'),
+  body('email')
+    .optional({ values: 'null' })
+    .isEmail()
+    .withMessage('Email address must be valid.'),
   body('password')
     .isLength({ min: 4 })
     .withMessage('Password must be at least four characters.'),

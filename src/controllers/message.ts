@@ -115,7 +115,11 @@ export const createMessage = async (req: Request, res: Response) => {
     await newMessage.create()
 
     return res.status(200).json({
-      message: newMessage,
+      message: {
+        ...newMessage,
+        senderName: user ? user.displayName : newMessage.senderName,
+        senderAvatar: user ? user.profilePicURL : newMessage.senderAvatar,
+      },
     })
   } catch (error) {
     const message =

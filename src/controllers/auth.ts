@@ -47,12 +47,12 @@ export const logIn = async (
     })
   }
 
-  const email = req.body.email
+  const username = req.body.username
   const password = req.body.password
 
   let user: User | null
   try {
-    user = await User.findByEmail(email)
+    user = await User.findByUsername(username)
   } catch (error) {
     return next(RequestError.accountDoesNotExist())
   }
@@ -104,15 +104,27 @@ export const signUp = async (
 
   const displayName: string = req.body.displayName.trim()
   const username: string = req.body.username.trim()
-  const email: string = req.body.email.trim().toLowerCase()
+  const email: string | null = req.body.email
+    ? req.body.email.trim().toLowerCase()
+    : null
   const password: string = req.body.password
 
   try {
-    const emailTaken = await User.accountWithEmailExists(email)
-    if (emailTaken) {
+    const usernameTaken = await User.accountWithUsernameExists(username)
+    if (usernameTaken) {
       return next(
-        RequestError.withMessageAndCode('This email account is taken.', 409)
+        RequestError.withMessageAndCode('This username is taken.', 409)
       )
+    }
+
+    // Check if email is taken (only if email is provided)
+    if (email) {
+      const emailTaken = await User.accountWithEmailExists(email)
+      if (emailTaken) {
+        return next(
+          RequestError.withMessageAndCode('This email account is taken.', 409)
+        )
+      }
     }
   } catch (error) {
     console.error(error)
@@ -145,12 +157,13 @@ export const signUp = async (
     verified: false,
     profilePicURL:
       STOCK_PROFILE_PICS[Math.floor(Math.random() * STOCK_PROFILE_PICS.length)],
-    verifyToken: User.generateVerifyToken(),
+    verifyToken: email ? User.generateVerifyToken() : null,
   })
 
   try {
     await newUser.create()
     if (
+      email &&
       process.env.NODE_ENV !== 'test' &&
       process.env.VERIFY_USERS === 'true'
     ) {
@@ -184,7 +197,7 @@ export const signUp = async (
     token: token,
     verified: newUser.verified,
     message:
-      process.env.VERIFY_USERS === 'true'
+      email && process.env.VERIFY_USERS === 'true'
         ? 'Check your email for an account verification link.'
         : 'You have successfully created your new account.',
   })
@@ -370,9 +383,7 @@ export const updateProfile = async (
   try {
     user = await User.findById(req.userId!)
   } catch (error) {
-    return next(
-      RequestError.withMessageAndCode('Unable to find user.', 500)
-    )
+    return next(RequestError.withMessageAndCode('Unable to find user.', 500))
   }
 
   if (user === null) {
