@@ -58,7 +58,9 @@ Required environment variables (create a `.env` file in the root):
 - `PORT` - Server port (defaults to 8000)
 - `TOKEN_SECRET` - JWT signing secret
 - `APP_BASE_URL` - Frontend application URL for password reset links
+- `BASE_URL` - Backend application URL for the image base URL links
 - `VERIFY_USERS` - Set to 'true' to enable email verification
+- `ENABLE_UPLOADS` - Set to 'true' to enable image uploads
 - `NODE_ENV` - Set to 'test' to disable email sending
 
 ## Architecture
@@ -164,6 +166,12 @@ Socket.IO is initialized in `setupSocketIO()` with CORS configured to allow all 
 ### Routes & Validation
 
 Routes use `express-validator` for input validation:
+
+**Health Check Route**:
+
+- `GET /health-check` - Health check endpoint that returns service status and feature availability
+  - Returns `emailEnabled` (true if `VERIFY_USERS=true`)
+  - Returns `imageUploadsEnabled` (true if `ENABLE_UPLOADS=true`)
 
 **Auth Routes** (`/auth/*`):
 
