@@ -126,12 +126,25 @@ export const signUp = async (
 
   const hashedPassword = await bcrypt.hash(password, 12)
 
+  const STOCK_PROFILE_PICS = [
+    'bird',
+    'dolphin',
+    'fish',
+    'horse',
+    'kangaroo',
+    'penguin',
+    'shark',
+    'snake',
+  ]
+
   const newUser = new User({
     displayName: displayName,
     username: username,
     email: email,
     hashedPassword: hashedPassword,
     verified: false,
+    profilePicURL:
+      STOCK_PROFILE_PICS[Math.floor(Math.random() * STOCK_PROFILE_PICS.length)],
     verifyToken: User.generateVerifyToken(),
   })
 
@@ -334,6 +347,65 @@ export const resetPassword = async (
     return next(
       RequestError.withMessageAndCode(
         'There was an error resetting your password.',
+        500
+      )
+    )
+  }
+}
+
+export const updateProfile = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const errors = validationResult(req)
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      message: errors.array()[0].msg,
+      errors: errors.array(),
+    })
+  }
+
+  let user: User | null
+  try {
+    user = await User.findById(req.userId!)
+  } catch (error) {
+    return next(
+      RequestError.withMessageAndCode('Unable to find user.', 500)
+    )
+  }
+
+  if (user === null) {
+    return next(RequestError.accountDoesNotExist())
+  }
+
+  try {
+    const updateData: any = {}
+
+    if (req.body.displayName !== undefined) {
+      updateData.displayName = req.body.displayName.trim()
+    }
+
+    if (req.body.profilePicURL !== undefined) {
+      updateData.profilePicURL = req.body.profilePicURL
+    }
+
+    await user.update(updateData)
+
+    return res.status(200).json({
+      user: {
+        id: user.id,
+        displayName: user.displayName,
+        username: user.username,
+        email: user.email,
+        profilePicURL: getUploadURL(user.profilePicURL),
+      },
+      message: 'Profile has been updated.',
+    })
+  } catch (error) {
+    return next(
+      RequestError.withMessageAndCode(
+        'There was an error updating your profile.',
         500
       )
     )

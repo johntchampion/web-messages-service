@@ -59,6 +59,21 @@ router.put(
 
 router.put('/reset-password', authController.resetPassword)
 
+router.put(
+  '/update-profile',
+  authentication,
+  authorization,
+  body('displayName')
+    .optional()
+    .isLength({ min: 1 })
+    .withMessage('Display name cannot be empty.'),
+  body('profilePicURL')
+    .optional()
+    .isString()
+    .withMessage('Profile picture URL must be a string.'),
+  authController.updateProfile
+)
+
 router.delete(
   '/delete-account',
   authentication,
