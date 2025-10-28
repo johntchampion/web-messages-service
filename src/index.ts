@@ -33,6 +33,10 @@ app.use(conversationRoutes)
 app.get('/health-check', (req: Request, res: Response, next: NextFunction) => {
   return res.status(200).json({
     message: 'Alive and well.',
+    features: {
+      emailEnabled: process.env.VERIFY_USERS === 'true',
+      imageUploadsEnabled: process.env.ENABLE_UPLOADS == 'true',
+    },
   })
 })
 

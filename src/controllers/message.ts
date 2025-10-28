@@ -4,24 +4,73 @@ import { validationResult } from 'express-validator'
 import Message from '../models/message'
 import Conversation from '../models/conversation'
 import User from '../models/user'
+import { getUploadURL } from '../util/upload'
 
 export const getMessages = async (req: Request, res: Response) => {
   const convoId: string = req.query.convoId as string
   const limit: number | undefined = req.query.limit
     ? parseInt(req.query.limit as string)
     : undefined
-  const skip: number | undefined = req.query.skip
-    ? parseInt(req.query.skip as string)
-    : undefined
 
   try {
     const conversation = await Conversation.findById(convoId)
-    const messages = await Message.listByConversation(convoId, {
+    const result = await Message.listByConversation(convoId, {
       limit,
     })
 
+    // Extract unique sender IDs from messages
+    const senderIds = Array.from(
+      new Set(
+        result.messages
+          .filter((msg) => msg.senderId)
+          .map((msg) => msg.senderId!)
+      )
+    )
+
+    // Fetch user details for all sender IDs
+    const userMap = new Map<
+      string,
+      { displayName: string; profilePicURL: string | null }
+    >()
+    if (senderIds.length > 0) {
+      const users = await Promise.all(senderIds.map((id) => User.findById(id)))
+      users.forEach((user) => {
+        if (user && user.id) {
+          userMap.set(user.id, {
+            displayName: user.displayName || '',
+            profilePicURL: getUploadURL(user.profilePicURL),
+          })
+        }
+      })
+    }
+
+    // Enrich messages with sender details
+    const enrichedMessages = result.messages.map((msg) => {
+      const messageData: any = {
+        id: msg.id,
+        createdAt: msg.createdAt,
+        updatedAt: msg.updatedAt,
+        convoId: msg.convoId,
+        senderId: msg.senderId,
+        type: msg.type,
+        content: msg.content,
+        senderName: msg.senderName,
+        senderAvatar: msg.senderAvatar,
+      }
+
+      // Add user details if this message has a senderId
+      if (msg.senderId && userMap.has(msg.senderId)) {
+        const userData = userMap.get(msg.senderId)!
+        messageData.senderName = userData.displayName
+        messageData.senderAvatar = userData.profilePicURL
+      }
+
+      return messageData
+    })
+
     return res.status(200).json({
-      messages: messages,
+      messages: enrichedMessages,
+      pageInfo: result.pageInfo,
       conversation: conversation,
       deletionDate: conversation.getDeletionDate(),
     })
@@ -66,7 +115,13 @@ export const createMessage = async (req: Request, res: Response) => {
     await newMessage.create()
 
     return res.status(200).json({
-      message: newMessage,
+      message: {
+        ...newMessage,
+        senderName: user ? user.displayName : newMessage.senderName,
+        senderAvatar: user
+          ? getUploadURL(user.profilePicURL)
+          : newMessage.senderAvatar,
+      },
     })
   } catch (error) {
     const message =

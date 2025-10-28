@@ -11,7 +11,7 @@ export interface Account {
   updatedAt?: Date
   displayName?: string
   username?: string
-  email?: string
+  email?: string | null
   profilePicURL?: string | null
   hashedPassword?: string
   verified?: boolean
@@ -25,7 +25,7 @@ export interface Account {
 export interface AccountPatch {
   displayName?: string
   username?: string
-  email?: string
+  email?: string | null
   profilePicURL?: string | null
   hashedPassword?: string
   verified?: boolean
@@ -43,7 +43,7 @@ export default class User implements Account {
   updatedAt?: Date
   displayName?: string
   username?: string
-  email?: string
+  email?: string | null
   profilePicURL?: string | null
   hashedPassword?: string
   verified?: boolean
@@ -74,7 +74,7 @@ export default class User implements Account {
     const params = [
       this.displayName,
       this.username,
-      this.email,
+      this.email ?? null,
       this.profilePicURL ?? null,
       this.hashedPassword,
       this.verified ?? false,
@@ -128,7 +128,7 @@ export default class User implements Account {
 
     if ('displayName' in patch) push('display_name', patch.displayName)
     if ('username' in patch) push('username', patch.username)
-    if ('email' in patch) push('email', patch.email)
+    if ('email' in patch) push('email', patch.email ?? null)
     if ('profilePicURL' in patch)
       push('profile_pic_url', patch.profilePicURL ?? null)
     if ('hashedPassword' in patch) push('hashed_password', patch.hashedPassword)
