@@ -104,9 +104,16 @@ export const signUp = async (
 
   const displayName: string = req.body.displayName.trim()
   const username: string = req.body.username.trim()
-  const email: string | null = req.body.email
-    ? req.body.email.trim().toLowerCase()
-    : null
+
+  const rawEmail = req.body.email
+  let email: string | null = null
+  if (typeof rawEmail === 'string') {
+    const trimmedEmail = rawEmail.trim()
+    const normalizedEmail = trimmedEmail.toLowerCase()
+    if (trimmedEmail && normalizedEmail !== 'null') {
+      email = normalizedEmail
+    }
+  }
   const password: string = req.body.password
 
   try {
