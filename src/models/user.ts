@@ -271,6 +271,36 @@ export default class User implements Account {
   }
 
   /**
+   * Validates an access token and returns the user if valid.
+   * Checks: token signature, expiry, user exists, and tokenVersion matches.
+   */
+  static async validateAccessToken(
+    accessToken: string
+  ): Promise<User | null> {
+    try {
+      // Verify JWT signature and expiry
+      const decoded = jwt.verify(
+        accessToken,
+        process.env.TOKEN_SECRET as string
+      ) as AccessToken
+
+      if (!decoded.userId) return null
+
+      // Get user from database
+      const user = await User.findById(decoded.userId)
+      if (!user) return null
+
+      // Verify tokenVersion matches (invalidates old tokens when password changes)
+      if (user.tokenVersion !== decoded.tokenVersion) return null
+
+      return user
+    } catch (err) {
+      // Invalid token (expired, malformed, wrong signature, etc.)
+      return null
+    }
+  }
+
+  /**
    * Validates a refresh token and returns the user if valid.
    * Checks: token signature, expiry, session exists, not revoked, tokenVersion matches.
    */
