@@ -11,7 +11,10 @@ import { setupSocketIO } from './util/io'
 import authRoutes from './routes/auth'
 import messageRoutes from './routes/message'
 import conversationRoutes from './routes/conversation'
-import { deleteConversations } from './util/cron'
+import {
+  deleteConversations,
+  deleteExpiredRefreshTokens,
+} from './util/cron'
 
 const app = express()
 const server = createServer(app)
@@ -48,13 +51,20 @@ app.use(
   }
 )
 
-const job = CronJob.from({
+const deleteConversationsJob = CronJob.from({
   cronTime: '0 0 * * * *',
   onTick: deleteConversations,
   timeZone: 'America/New_York',
 })
 
+const deleteExpiredRefreshTokensJob = CronJob.from({
+  cronTime: '0 30 2 * * *',
+  onTick: deleteExpiredRefreshTokens,
+  timeZone: 'America/New_York',
+})
+
 server.listen(process.env.PORT || 8000, () => {
   console.log(`Now listening on port ${process.env.PORT || 8000}`)
-  job.start()
+  deleteConversationsJob.start()
+  deleteExpiredRefreshTokensJob.start()
 })
