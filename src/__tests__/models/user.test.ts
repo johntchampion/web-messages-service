@@ -340,16 +340,17 @@ describe('User Model', () => {
       mockQuery.mockResolvedValue(createMockQueryResult([updatedRow], 1))
 
       const user = new User({ id: 'test-user-id' })
-      await user.beginPasswordReset('reset-token-123')
+      await user.beginPasswordReset()
 
       expect(mockQuery).toHaveBeenCalled()
-      expect(user.resetPasswordToken).toBe('reset-token-123')
+      console.log(user.resetPasswordToken)
+      expect(user.resetPasswordToken).toBeDefined()
     })
 
     it('should throw error when user has no id', async () => {
       const user = new User()
 
-      await expect(user.beginPasswordReset('token')).rejects.toThrow(
+      await expect(user.beginPasswordReset()).rejects.toThrow(
         'User is not yet saved to the database.'
       )
     })

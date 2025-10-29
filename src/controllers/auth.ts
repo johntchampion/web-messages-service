@@ -1,11 +1,8 @@
 import { Request, Response, NextFunction } from 'express'
-import bcrypt from 'bcryptjs'
-import crypto from 'crypto'
-import jwt from 'jsonwebtoken'
 import { validationResult } from 'express-validator'
 
 import RequestError from '../util/error'
-import User, { AuthToken } from '../models/user'
+import User from '../models/user'
 import { getUploadURL } from '../util/upload'
 
 export const ping = async (req: Request, res: Response, next: NextFunction) => {
@@ -58,27 +55,22 @@ export const logIn = async (
   }
 
   if (user) {
-    const match = await bcrypt.compare(password, user.hashedPassword!)
+    const match = await user.verifyPassword(password)
 
     if (match) {
-      const tokenPayload: AuthToken = {
-        userId: user.id!,
-        verified: user.verified || false,
-      }
-      const token = jwt.sign(tokenPayload, process.env.TOKEN_SECRET as string, {
-        expiresIn: '1h',
-      })
+      const { accessToken, refreshToken } = await user.generateTokens()
 
       return res.status(200).json({
         user: {
           id: user.id,
+          verified: user.verified,
           displayName: user.displayName,
           username: user.username,
           email: user.email,
           profilePicURL: getUploadURL(user.profilePicURL),
         },
-        token: token,
-        verified: user.verified,
+        accessToken: accessToken,
+        refreshToken: refreshToken,
         message: 'You are now logged in.',
       })
     } else {
@@ -143,7 +135,7 @@ export const signUp = async (
     )
   }
 
-  const hashedPassword = await bcrypt.hash(password, 12)
+  const hashedPassword = await User.hashPassword(password)
 
   const STOCK_PROFILE_PICS = [
     'bird',
@@ -185,24 +177,19 @@ export const signUp = async (
     )
   }
 
-  const tokenPayload: AuthToken = {
-    userId: newUser.id!,
-    verified: newUser.verified || false,
-  }
-  const token = jwt.sign(tokenPayload, process.env.TOKEN_SECRET as string, {
-    expiresIn: '1h',
-  })
+  const { accessToken, refreshToken } = await newUser.generateTokens()
 
   return res.status(201).json({
     user: {
       id: newUser.id,
+      verified: newUser.verified,
       displayName: newUser.displayName,
       username: newUser.username,
       email: newUser.email,
       profilePicURL: getUploadURL(newUser.profilePicURL),
     },
-    token: token,
-    verified: newUser.verified,
+    accessToken: accessToken,
+    refreshToken: refreshToken,
     message:
       email && process.env.VERIFY_USERS === 'true'
         ? 'Check your email for an account verification link.'
@@ -243,17 +230,12 @@ export const confirmEmail = async (
   try {
     await user.verify(verifyToken as string)
 
-    const tokenPayload: AuthToken = {
-      userId: user.id!,
-      verified: user.verified || false,
-    }
-    const token = jwt.sign(tokenPayload, process.env.TOKEN_SECRET as string, {
-      expiresIn: '1h',
-    })
+    const { accessToken, refreshToken } = await user.generateTokens()
 
     return res.status(200).json({
       verified: user.verified,
-      token: token,
+      accessToken: accessToken,
+      refreshToken: refreshToken,
       message: 'You can now sign into the account.',
     })
   } catch (error) {
@@ -303,9 +285,6 @@ export const requestPasswordReset = async (
 ) => {
   const email = req.body.email
 
-  const buffer = crypto.randomBytes(32)
-  const token = buffer.toString('hex')
-
   let user: User | null
   try {
     user = await User.findByEmail(email)
@@ -323,7 +302,7 @@ export const requestPasswordReset = async (
   }
 
   try {
-    await user.update({ resetPasswordToken: token })
+    await user.beginPasswordReset()
   } catch (error) {
     return next(
       RequestError.withMessageAndCode(

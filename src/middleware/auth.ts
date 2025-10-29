@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 
 import RequestError from '../util/error'
-import { AuthToken } from '../models/user'
+import { AccessToken } from '../models/user'
 
 export const authentication = (
   req: Request,
@@ -16,12 +16,12 @@ export const authentication = (
     return next()
   } else {
     const token = authHeader.split(' ')[1]
-    let decodedToken: AuthToken
+    let decodedToken: AccessToken
     try {
       decodedToken = jwt.verify(
         token,
         process.env.TOKEN_SECRET as string
-      ) as AuthToken
+      ) as AccessToken
     } catch (error) {
       req.userId = null
       return next()

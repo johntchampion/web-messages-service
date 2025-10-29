@@ -1,4 +1,6 @@
 import bcrypt from 'bcryptjs'
+import crypto from 'crypto'
+import jwt from 'jsonwebtoken'
 import query from '../util/db'
 import sendEmail from '../util/mail'
 
@@ -14,11 +16,14 @@ export interface Account {
   email?: string | null
   profilePicURL?: string | null
   hashedPassword?: string
+  passwordChangedAt?: Date
+  tokenVersion?: number
   verified?: boolean
   verifyToken?: string | null
   verifyTokenTimestamp?: Date | null
   resetPasswordToken?: string | null
   resetPasswordTokenTimestamp?: Date | null
+  disabled?: boolean
   id?: string
 }
 
@@ -28,14 +33,21 @@ export interface AccountPatch {
   email?: string | null
   profilePicURL?: string | null
   hashedPassword?: string
+  tokenVersion?: number
   verified?: boolean
   verifyToken?: string | null
   resetPasswordToken?: string | null
+  disabled?: boolean
 }
 
-export interface AuthToken {
+export interface AccessToken {
   userId: string
   verified: boolean
+  tokenVersion: number
+}
+
+export interface RefreshToken {
+  userId: string
 }
 
 export default class User implements Account {
@@ -46,11 +58,14 @@ export default class User implements Account {
   email?: string | null
   profilePicURL?: string | null
   hashedPassword?: string
+  passwordChangedAt?: Date
+  tokenVersion?: number
   verified?: boolean
   verifyToken?: string | null
   verifyTokenTimestamp?: Date | null
   resetPasswordToken?: string | null
   resetPasswordTokenTimestamp?: Date | null
+  disabled?: boolean
   id?: string
 
   constructor(props: Account = {}) {
@@ -174,6 +189,59 @@ export default class User implements Account {
 
   // ---------- Auth flows ----------
 
+  static async hashPassword(plaintext: string): Promise<string> {
+    return await bcrypt.hash(plaintext, 12)
+  }
+
+  async generateTokens(): Promise<{
+    accessToken: string
+    refreshToken: string
+  }> {
+    if (!this.id) throw new Error('User is not yet saved to the database.')
+    await this.reload()
+
+    const accessTokenPayload: AccessToken = {
+      userId: this.id!,
+      verified: this.verified || false,
+      tokenVersion: this.tokenVersion!,
+    }
+    const refreshTokenPayload: RefreshToken = {
+      userId: this.id!,
+    }
+
+    const accessToken = jwt.sign(
+      accessTokenPayload,
+      process.env.TOKEN_SECRET as string,
+      {
+        expiresIn: '15m',
+      }
+    )
+    const refreshToken = jwt.sign(
+      refreshTokenPayload,
+      process.env.TOKEN_SECRET as string,
+      {
+        expiresIn: '7d',
+      }
+    )
+
+    return {
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+    }
+  }
+
+  /**
+   * Increments the token version to invalidate existing tokens.
+   */
+  async incrementTokenVersion(): Promise<User> {
+    if (!this.id) throw new Error('User is not yet saved to the database.')
+    await this.reload()
+
+    const newVersion = (this.tokenVersion || 0) + 1
+    await this.update({ tokenVersion: newVersion })
+    return this
+  }
+
   /**
    * Generate a 6-digit code (with leading zeros).
    */
@@ -212,8 +280,11 @@ export default class User implements Account {
   /**
    * Starts password reset by setting a token (timestamp is handled by DB trigger).
    */
-  async beginPasswordReset(resetToken: string): Promise<User> {
+  async beginPasswordReset(): Promise<User> {
     if (!this.id) throw new Error('User is not yet saved to the database.')
+    const buffer = crypto.randomBytes(32)
+    const resetToken = buffer.toString('hex')
+
     await this.update({ resetPasswordToken: resetToken })
     return this
   }
@@ -336,11 +407,14 @@ export default class User implements Account {
       email: row['email'],
       profilePicURL: row['profile_pic_url'],
       hashedPassword: row['hashed_password'],
+      passwordChangedAt: row['password_changed_at'],
+      tokenVersion: row['token_version'],
       verified: row['verified'],
       verifyToken: row['verify_token'],
       verifyTokenTimestamp: row['verify_token_timestamp'],
       resetPasswordToken: row['reset_password_token'],
       resetPasswordTokenTimestamp: row['reset_password_token_timestamp'],
+      disabled: row['disabled'],
       id: row['user_id'],
     })
   }
