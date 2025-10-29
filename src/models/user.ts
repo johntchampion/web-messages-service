@@ -259,6 +259,7 @@ export default class User implements Account {
     const sql = `
       INSERT INTO sessions (user_id, rt_hash, user_agent, ip, expires_at)
       VALUES ($1, $2, $3, $4, $5)
+      RETURNING session_id
     `
     const result = await query(sql, [
       userId,
@@ -274,9 +275,7 @@ export default class User implements Account {
    * Validates an access token and returns the user if valid.
    * Checks: token signature, expiry, user exists, and tokenVersion matches.
    */
-  static async validateAccessToken(
-    accessToken: string
-  ): Promise<User | null> {
+  static async validateAccessToken(accessToken: string): Promise<User | null> {
     try {
       // Verify JWT signature and expiry
       const decoded = jwt.verify(
@@ -333,7 +332,7 @@ export default class User implements Account {
 
       if (!sessionResult.rowCount) return null
 
-      // Get user and verify tokenVersion
+      // Get user
       const user = await User.findById(decoded.userId)
       if (!user) return null
 

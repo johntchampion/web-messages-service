@@ -171,36 +171,36 @@ export const signUp = async (
     ) {
       await newUser.sendVerificationEmail()
     }
+
+    const { accessToken, refreshToken } = await newUser.generateTokens({
+      userAgent: req.get('user-agent') ?? undefined,
+      ip: req.ip,
+    })
+
+    return res.status(201).json({
+      user: {
+        id: newUser.id,
+        verified: newUser.verified,
+        displayName: newUser.displayName,
+        username: newUser.username,
+        email: newUser.email,
+        profilePicURL: getUploadURL(newUser.profilePicURL),
+      },
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+      message:
+        email && process.env.VERIFY_USERS === 'true'
+          ? 'Check your email for an account verification link.'
+          : 'You have successfully created your new account.',
+    })
   } catch (error) {
     return next(
       RequestError.withMessageAndCode(
-        'Something went wrong sending a verification email.',
+        'Something went wrong creating your account.',
         500
       )
     )
   }
-
-  const { accessToken, refreshToken } = await newUser.generateTokens({
-    userAgent: req.get('user-agent') ?? undefined,
-    ip: req.ip,
-  })
-
-  return res.status(201).json({
-    user: {
-      id: newUser.id,
-      verified: newUser.verified,
-      displayName: newUser.displayName,
-      username: newUser.username,
-      email: newUser.email,
-      profilePicURL: getUploadURL(newUser.profilePicURL),
-    },
-    accessToken: accessToken,
-    refreshToken: refreshToken,
-    message:
-      email && process.env.VERIFY_USERS === 'true'
-        ? 'Check your email for an account verification link.'
-        : 'You have successfully created your new account.',
-  })
 }
 
 export const confirmEmail = async (
@@ -477,7 +477,10 @@ export const logOut = async (
 
   if (!refreshToken || typeof refreshToken !== 'string') {
     return next(
-      RequestError.withMessageAndCode('A refresh token is required to log out.', 400)
+      RequestError.withMessageAndCode(
+        'A refresh token is required to log out.',
+        400
+      )
     )
   }
 
@@ -485,12 +488,15 @@ export const logOut = async (
     await User.revokeSession(refreshToken)
   } catch (error) {
     return next(
-      RequestError.withMessageAndCode('There was an error logging you out.', 500)
+      RequestError.withMessageAndCode(
+        'There was an error logging you out.',
+        500
+      )
     )
   }
 
   return res.status(200).json({
-    message: 'You have been logged out.',
+    message: 'This refresh token is now expired.',
   })
 }
 
