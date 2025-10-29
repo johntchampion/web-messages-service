@@ -62,6 +62,33 @@ router.put(
 
 router.put('/reset-password', authController.resetPassword)
 
+router.post(
+  '/logout',
+  body('refreshToken')
+    .isString()
+    .withMessage('Refresh token is required.')
+    .notEmpty()
+    .withMessage('Refresh token cannot be empty.'),
+  authController.logOut
+)
+
+router.post(
+  '/logout-everywhere',
+  authentication,
+  authorization,
+  authController.logOutEverywhere
+)
+
+router.post(
+  '/refresh',
+  body('refreshToken')
+    .isString()
+    .withMessage('Refresh token is required.')
+    .notEmpty()
+    .withMessage('Refresh token cannot be empty.'),
+  authController.refreshSession
+)
+
 router.put(
   '/update-profile',
   authentication,

@@ -58,7 +58,10 @@ export const logIn = async (
     const match = await user.verifyPassword(password)
 
     if (match) {
-      const { accessToken, refreshToken } = await user.generateTokens()
+      const { accessToken, refreshToken } = await user.generateTokens({
+        userAgent: req.get('user-agent') ?? undefined,
+        ip: req.ip,
+      })
 
       return res.status(200).json({
         user: {
@@ -168,33 +171,36 @@ export const signUp = async (
     ) {
       await newUser.sendVerificationEmail()
     }
+
+    const { accessToken, refreshToken } = await newUser.generateTokens({
+      userAgent: req.get('user-agent') ?? undefined,
+      ip: req.ip,
+    })
+
+    return res.status(201).json({
+      user: {
+        id: newUser.id,
+        verified: newUser.verified,
+        displayName: newUser.displayName,
+        username: newUser.username,
+        email: newUser.email,
+        profilePicURL: getUploadURL(newUser.profilePicURL),
+      },
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+      message:
+        email && process.env.VERIFY_USERS === 'true'
+          ? 'Check your email for an account verification link.'
+          : 'You have successfully created your new account.',
+    })
   } catch (error) {
     return next(
       RequestError.withMessageAndCode(
-        'Something went wrong sending a verification email.',
+        'Something went wrong creating your account.',
         500
       )
     )
   }
-
-  const { accessToken, refreshToken } = await newUser.generateTokens()
-
-  return res.status(201).json({
-    user: {
-      id: newUser.id,
-      verified: newUser.verified,
-      displayName: newUser.displayName,
-      username: newUser.username,
-      email: newUser.email,
-      profilePicURL: getUploadURL(newUser.profilePicURL),
-    },
-    accessToken: accessToken,
-    refreshToken: refreshToken,
-    message:
-      email && process.env.VERIFY_USERS === 'true'
-        ? 'Check your email for an account verification link.'
-        : 'You have successfully created your new account.',
-  })
 }
 
 export const confirmEmail = async (
@@ -230,7 +236,10 @@ export const confirmEmail = async (
   try {
     await user.setVerifiedStatus(verifyToken as string)
 
-    const { accessToken, refreshToken } = await user.generateTokens()
+    const { accessToken, refreshToken } = await user.generateTokens({
+      userAgent: req.get('user-agent') ?? undefined,
+      ip: req.ip,
+    })
 
     return res.status(200).json({
       verified: user.verified,
@@ -445,6 +454,137 @@ export const deleteAccount = async (
     return next(
       RequestError.withMessageAndCode(
         'There was an error deleting this person.',
+        500
+      )
+    )
+  }
+}
+
+export const logOut = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const errors = validationResult(req)
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      message: errors.array()[0].msg,
+      errors: errors.array(),
+    })
+  }
+
+  const refreshToken = req.body.refreshToken
+
+  if (!refreshToken || typeof refreshToken !== 'string') {
+    return next(
+      RequestError.withMessageAndCode(
+        'A refresh token is required to log out.',
+        400
+      )
+    )
+  }
+
+  try {
+    await User.revokeSession(refreshToken)
+  } catch (error) {
+    return next(
+      RequestError.withMessageAndCode(
+        'There was an error logging you out.',
+        500
+      )
+    )
+  }
+
+  return res.status(200).json({
+    message: 'This refresh token is now expired.',
+  })
+}
+
+export const logOutEverywhere = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.userId) {
+    return next(RequestError.notAuthorized())
+  }
+
+  try {
+    const user = await User.findById(req.userId)
+    if (!user) {
+      return next(RequestError.accountDoesNotExist())
+    }
+
+    await user.revokeAllSessions()
+
+    return res.status(200).json({
+      message: 'All sessions have been revoked.',
+    })
+  } catch (error) {
+    return next(
+      RequestError.withMessageAndCode(
+        'There was an error revoking your sessions.',
+        500
+      )
+    )
+  }
+}
+
+export const refreshSession = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const errors = validationResult(req)
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      message: errors.array()[0].msg,
+      errors: errors.array(),
+    })
+  }
+
+  const refreshTokenValue = req.body.refreshToken
+
+  if (!refreshTokenValue || typeof refreshTokenValue !== 'string') {
+    return next(
+      RequestError.withMessageAndCode(
+        'A refresh token is required to refresh the session.',
+        400
+      )
+    )
+  }
+
+  try {
+    const user = await User.validateRefreshToken(refreshTokenValue)
+    if (!user) {
+      await User.revokeSession(refreshTokenValue)
+      return next(RequestError.notAuthorized())
+    }
+
+    await User.revokeSession(refreshTokenValue)
+
+    const { accessToken, refreshToken } = await user.generateTokens({
+      userAgent: req.get('user-agent') ?? undefined,
+      ip: req.ip,
+    })
+
+    return res.status(200).json({
+      user: {
+        id: user.id,
+        verified: user.verified,
+        displayName: user.displayName,
+        username: user.username,
+        email: user.email,
+        profilePicURL: getUploadURL(user.profilePicURL),
+      },
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+      message: 'Session has been refreshed.',
+    })
+  } catch (error) {
+    return next(
+      RequestError.withMessageAndCode(
+        'There was an error refreshing the session.',
         500
       )
     )

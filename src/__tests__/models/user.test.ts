@@ -343,7 +343,6 @@ describe('User Model', () => {
       await user.beginPasswordReset()
 
       expect(mockQuery).toHaveBeenCalled()
-      console.log(user.resetPasswordToken)
       expect(user.resetPasswordToken).toBeDefined()
     })
 
@@ -366,10 +365,16 @@ describe('User Model', () => {
         reset_password_token: null,
         hashed_password: 'new-hashed-password',
       })
+      const tokenVersionRow = createMockUserRow({
+        reset_password_token: null,
+        token_version: (updatedRow.token_version || 0) + 1,
+      })
 
       mockQuery
         .mockResolvedValueOnce(createMockQueryResult([mockRow], 1))
         .mockResolvedValueOnce(createMockQueryResult([updatedRow], 1))
+        .mockResolvedValueOnce(createMockQueryResult([tokenVersionRow], 1))
+        .mockResolvedValueOnce(createMockQueryResult([], 1))
 
       const user = new User({ id: 'test-user-id' })
       await user.completePasswordReset('reset-token-123', 'newpassword')

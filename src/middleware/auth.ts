@@ -1,10 +1,9 @@
 import { Request, Response, NextFunction } from 'express'
-import jwt from 'jsonwebtoken'
 
 import RequestError from '../util/error'
-import { AccessToken } from '../models/user'
+import User from '../models/user'
 
-export const authentication = (
+export const authentication = async (
   req: Request,
   res: Response,
   next: NextFunction
@@ -14,27 +13,26 @@ export const authentication = (
   if (!authHeader) {
     req.userId = null
     return next()
-  } else {
-    const token = authHeader.split(' ')[1]
-    let decodedToken: AccessToken
-    try {
-      decodedToken = jwt.verify(
-        token,
-        process.env.TOKEN_SECRET as string
-      ) as AccessToken
-    } catch (error) {
+  }
+
+  const token = authHeader.split(' ')[1]
+
+  try {
+    const user = await User.validateAccessToken(token)
+    if (!user) {
       req.userId = null
-      return next()
-    }
-    if (!decodedToken) {
-      req.userId = null
+      req.verified = undefined
       return next()
     }
 
-    req.userId = decodedToken.userId
-    req.verified = decodedToken.verified
-    return next()
+    req.userId = user.id ?? null
+    req.verified = user.verified ?? false
+  } catch (error) {
+    req.userId = null
+    req.verified = undefined
   }
+
+  return next()
 }
 
 export const authorization = (
