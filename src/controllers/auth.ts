@@ -228,7 +228,7 @@ export const confirmEmail = async (
   }
 
   try {
-    await user.verify(verifyToken as string)
+    await user.setVerifiedStatus(verifyToken as string)
 
     const { accessToken, refreshToken } = await user.generateTokens()
 

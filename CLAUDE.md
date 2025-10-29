@@ -108,7 +108,7 @@ All models follow a consistent pattern:
 - Email verification with 6-digit codes (15-minute expiry)
 - Password reset with crypto tokens (1-hour expiry)
 - Static finders: `findById()`, `findByEmail()`, `findByUsername()`, `findByResetPasswordToken()`, `findBySocketId()`
-- Instance methods: `create()`, `update()`, `delete()`, `verify()`, `verifyPassword()`, `sendVerificationEmail()`, `sendPasswordResetEmail()`
+- Instance methods: `create()`, `update()`, `delete()`, `setVerifiedStatus()`, `verifyPassword()`, `sendVerificationEmail()`, `sendPasswordResetEmail()`
 
 **Message** (`src/models/message.ts`):
 

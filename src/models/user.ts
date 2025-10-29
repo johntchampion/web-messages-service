@@ -375,7 +375,7 @@ export default class User implements Account {
    * Verifies the account using the code. Also clears the token.
    * Respects token timestamp (15 min window) if present.
    */
-  async verify(code: string): Promise<User> {
+  async setVerifiedStatus(code: string): Promise<User> {
     if (!this.id) throw new Error('User is not yet saved to the database.')
     await this.reload()
 
@@ -448,7 +448,7 @@ export default class User implements Account {
   }
 
   /**
-   * Utility: verify a plaintext password against the stored hash.
+   * Verify a plaintext password against the stored hash.
    */
   async verifyPassword(plaintext: string): Promise<boolean> {
     if (!this.hashedPassword) return false
