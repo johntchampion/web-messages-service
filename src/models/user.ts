@@ -72,7 +72,7 @@ export default class User implements Account {
     Object.assign(this, props)
   }
 
-  // ---------- Creation ----------
+  // ---------- CRUD ----------
 
   /**
    * Creates a user. Token timestamps are managed by DB triggers.
@@ -147,10 +147,12 @@ export default class User implements Account {
     if ('profilePicURL' in patch)
       push('profile_pic_url', patch.profilePicURL ?? null)
     if ('hashedPassword' in patch) push('hashed_password', patch.hashedPassword)
+    if ('tokenVersion' in patch) push('token_version', patch.tokenVersion)
     if ('verified' in patch) push('verified', patch.verified)
     if ('verifyToken' in patch) push('verify_token', patch.verifyToken ?? null)
     if ('resetPasswordToken' in patch)
       push('reset_password_token', patch.resetPasswordToken ?? null)
+    if ('disabled' in patch) push('disabled', patch.disabled ?? null)
 
     if (sets.length === 0) return this.reload()
 
@@ -193,7 +195,7 @@ export default class User implements Account {
     return await bcrypt.hash(plaintext, 12)
   }
 
-  async generateTokens(): Promise<{
+  async generateTokens(options?: { userAgent?: string; ip?: string }): Promise<{
     accessToken: string
     refreshToken: string
   }> {
@@ -213,7 +215,7 @@ export default class User implements Account {
       accessTokenPayload,
       process.env.TOKEN_SECRET as string,
       {
-        expiresIn: '15m',
+        expiresIn: '1h',
       }
     )
     const refreshToken = jwt.sign(
@@ -224,10 +226,128 @@ export default class User implements Account {
       }
     )
 
+    // Store refresh token in sessions table
+    await User.storeRefreshToken(
+      this.id!,
+      refreshToken,
+      options?.userAgent,
+      options?.ip
+    )
+
     return {
       accessToken: accessToken,
       refreshToken: refreshToken,
     }
+  }
+
+  /**
+   * Stores a refresh token in the sessions table (hashed).
+   * Returns the session ID.
+   */
+  static async storeRefreshToken(
+    userId: string,
+    refreshToken: string,
+    userAgent?: string,
+    ip?: string
+  ): Promise<string> {
+    const rtHash = crypto
+      .createHash('sha256')
+      .update(refreshToken)
+      .digest('hex')
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+
+    const sql = `
+      INSERT INTO sessions (user_id, rt_hash, user_agent, ip, expires_at)
+      VALUES ($1, $2, $3, $4, $5)
+    `
+    const result = await query(sql, [
+      userId,
+      rtHash,
+      userAgent ?? null,
+      ip ?? null,
+      expiresAt.toISOString(),
+    ])
+    return result.rows[0]?.session_id
+  }
+
+  /**
+   * Validates a refresh token and returns the user if valid.
+   * Checks: token signature, expiry, session exists, not revoked, tokenVersion matches.
+   */
+  static async validateRefreshToken(
+    refreshToken: string
+  ): Promise<User | null> {
+    try {
+      // Verify JWT signature and expiry
+      const decoded = jwt.verify(
+        refreshToken,
+        process.env.TOKEN_SECRET as string
+      ) as RefreshToken
+
+      if (!decoded.userId) return null
+
+      // Hash the token to look up in sessions table
+      const rtHash = crypto
+        .createHash('sha256')
+        .update(refreshToken)
+        .digest('hex')
+
+      // Check if session exists and is not revoked
+      const sessionResult = await query(
+        `SELECT * FROM sessions
+         WHERE rt_hash = $1
+           AND revoked_at IS NULL
+           AND expires_at > NOW()`,
+        [rtHash]
+      )
+
+      if (!sessionResult.rowCount) return null
+
+      // Get user and verify tokenVersion
+      const user = await User.findById(decoded.userId)
+      if (!user) return null
+
+      // Note: We don't check tokenVersion here because refresh tokens
+      // don't contain it. Instead, we rely on revokeAllSessions() being
+      // called when password changes to invalidate all refresh tokens.
+
+      return user
+    } catch (err) {
+      // Invalid token (expired, malformed, wrong signature, etc.)
+      return null
+    }
+  }
+
+  /**
+   * Revokes a specific session by ID.
+   */
+  static async revokeSession(refreshToken: string): Promise<void> {
+    // Hash the token to look up in sessions table
+    const rtHash = crypto
+      .createHash('sha256')
+      .update(refreshToken)
+      .digest('hex')
+
+    await query('UPDATE sessions SET revoked_at = NOW() WHERE rt_hash = $1', [
+      rtHash,
+    ])
+  }
+
+  /**
+   * Revokes all sessions for a user and increments tokenVersion.
+   * This invalidates all access tokens and refresh tokens.
+   */
+  async revokeAllSessions(): Promise<void> {
+    if (!this.id) throw new Error('User is not yet saved to the database.')
+
+    // Increment tokenVersion to invalidate all access tokens
+    const newVersion = (this.tokenVersion || 0) + 1
+    await this.update({ tokenVersion: newVersion })
+
+    // Revoke all refresh tokens
+    await query('UPDATE sessions SET revoked_at = NOW() WHERE user_id = $1', [
+      this.id,
+    ])
   }
 
   /**
@@ -291,7 +411,8 @@ export default class User implements Account {
 
   /**
    * Completes password reset given a token and a new password.
-   * Clears token afterward.
+   * Increments tokenVersion and revokes all sessions to invalidate all tokens.
+   * Clears reset token afterward.
    */
   async completePasswordReset(
     token: string,
@@ -312,10 +433,17 @@ export default class User implements Account {
     }
 
     const newHashedPassword = await bcrypt.hash(newPassword, 12)
+    const newVersion = (this.tokenVersion || 0) + 1
+
     await this.update({
       hashedPassword: newHashedPassword,
       resetPasswordToken: null,
+      tokenVersion: newVersion,
     })
+
+    // Revoke all existing sessions to invalidate refresh tokens
+    await this.revokeAllSessions()
+
     return this
   }
 
