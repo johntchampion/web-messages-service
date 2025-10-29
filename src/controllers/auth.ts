@@ -1,11 +1,8 @@
 import { Request, Response, NextFunction } from 'express'
-import bcrypt from 'bcryptjs'
-import crypto from 'crypto'
-import jwt from 'jsonwebtoken'
 import { validationResult } from 'express-validator'
 
 import RequestError from '../util/error'
-import User, { AuthToken } from '../models/user'
+import User from '../models/user'
 import { getUploadURL } from '../util/upload'
 
 export const ping = async (req: Request, res: Response, next: NextFunction) => {
@@ -58,27 +55,25 @@ export const logIn = async (
   }
 
   if (user) {
-    const match = await bcrypt.compare(password, user.hashedPassword!)
+    const match = await user.verifyPassword(password)
 
     if (match) {
-      const tokenPayload: AuthToken = {
-        userId: user.id!,
-        verified: user.verified || false,
-      }
-      const token = jwt.sign(tokenPayload, process.env.TOKEN_SECRET as string, {
-        expiresIn: '1h',
+      const { accessToken, refreshToken } = await user.generateTokens({
+        userAgent: req.get('user-agent') ?? undefined,
+        ip: req.ip,
       })
 
       return res.status(200).json({
         user: {
           id: user.id,
+          verified: user.verified,
           displayName: user.displayName,
           username: user.username,
           email: user.email,
           profilePicURL: getUploadURL(user.profilePicURL),
         },
-        token: token,
-        verified: user.verified,
+        accessToken: accessToken,
+        refreshToken: refreshToken,
         message: 'You are now logged in.',
       })
     } else {
@@ -143,7 +138,7 @@ export const signUp = async (
     )
   }
 
-  const hashedPassword = await bcrypt.hash(password, 12)
+  const hashedPassword = await User.hashPassword(password)
 
   const STOCK_PROFILE_PICS = [
     'bird',
@@ -176,38 +171,36 @@ export const signUp = async (
     ) {
       await newUser.sendVerificationEmail()
     }
+
+    const { accessToken, refreshToken } = await newUser.generateTokens({
+      userAgent: req.get('user-agent') ?? undefined,
+      ip: req.ip,
+    })
+
+    return res.status(201).json({
+      user: {
+        id: newUser.id,
+        verified: newUser.verified,
+        displayName: newUser.displayName,
+        username: newUser.username,
+        email: newUser.email,
+        profilePicURL: getUploadURL(newUser.profilePicURL),
+      },
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+      message:
+        email && process.env.VERIFY_USERS === 'true'
+          ? 'Check your email for an account verification link.'
+          : 'You have successfully created your new account.',
+    })
   } catch (error) {
     return next(
       RequestError.withMessageAndCode(
-        'Something went wrong sending a verification email.',
+        'Something went wrong creating your account.',
         500
       )
     )
   }
-
-  const tokenPayload: AuthToken = {
-    userId: newUser.id!,
-    verified: newUser.verified || false,
-  }
-  const token = jwt.sign(tokenPayload, process.env.TOKEN_SECRET as string, {
-    expiresIn: '1h',
-  })
-
-  return res.status(201).json({
-    user: {
-      id: newUser.id,
-      displayName: newUser.displayName,
-      username: newUser.username,
-      email: newUser.email,
-      profilePicURL: getUploadURL(newUser.profilePicURL),
-    },
-    token: token,
-    verified: newUser.verified,
-    message:
-      email && process.env.VERIFY_USERS === 'true'
-        ? 'Check your email for an account verification link.'
-        : 'You have successfully created your new account.',
-  })
 }
 
 export const confirmEmail = async (
@@ -241,19 +234,17 @@ export const confirmEmail = async (
   }
 
   try {
-    await user.verify(verifyToken as string)
+    await user.setVerifiedStatus(verifyToken as string)
 
-    const tokenPayload: AuthToken = {
-      userId: user.id!,
-      verified: user.verified || false,
-    }
-    const token = jwt.sign(tokenPayload, process.env.TOKEN_SECRET as string, {
-      expiresIn: '1h',
+    const { accessToken, refreshToken } = await user.generateTokens({
+      userAgent: req.get('user-agent') ?? undefined,
+      ip: req.ip,
     })
 
     return res.status(200).json({
       verified: user.verified,
-      token: token,
+      accessToken: accessToken,
+      refreshToken: refreshToken,
       message: 'You can now sign into the account.',
     })
   } catch (error) {
@@ -303,9 +294,6 @@ export const requestPasswordReset = async (
 ) => {
   const email = req.body.email
 
-  const buffer = crypto.randomBytes(32)
-  const token = buffer.toString('hex')
-
   let user: User | null
   try {
     user = await User.findByEmail(email)
@@ -323,7 +311,7 @@ export const requestPasswordReset = async (
   }
 
   try {
-    await user.update({ resetPasswordToken: token })
+    await user.beginPasswordReset()
   } catch (error) {
     return next(
       RequestError.withMessageAndCode(
@@ -466,6 +454,137 @@ export const deleteAccount = async (
     return next(
       RequestError.withMessageAndCode(
         'There was an error deleting this person.',
+        500
+      )
+    )
+  }
+}
+
+export const logOut = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const errors = validationResult(req)
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      message: errors.array()[0].msg,
+      errors: errors.array(),
+    })
+  }
+
+  const refreshToken = req.body.refreshToken
+
+  if (!refreshToken || typeof refreshToken !== 'string') {
+    return next(
+      RequestError.withMessageAndCode(
+        'A refresh token is required to log out.',
+        400
+      )
+    )
+  }
+
+  try {
+    await User.revokeSession(refreshToken)
+  } catch (error) {
+    return next(
+      RequestError.withMessageAndCode(
+        'There was an error logging you out.',
+        500
+      )
+    )
+  }
+
+  return res.status(200).json({
+    message: 'This refresh token is now expired.',
+  })
+}
+
+export const logOutEverywhere = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.userId) {
+    return next(RequestError.notAuthorized())
+  }
+
+  try {
+    const user = await User.findById(req.userId)
+    if (!user) {
+      return next(RequestError.accountDoesNotExist())
+    }
+
+    await user.revokeAllSessions()
+
+    return res.status(200).json({
+      message: 'All sessions have been revoked.',
+    })
+  } catch (error) {
+    return next(
+      RequestError.withMessageAndCode(
+        'There was an error revoking your sessions.',
+        500
+      )
+    )
+  }
+}
+
+export const refreshSession = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const errors = validationResult(req)
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      message: errors.array()[0].msg,
+      errors: errors.array(),
+    })
+  }
+
+  const refreshTokenValue = req.body.refreshToken
+
+  if (!refreshTokenValue || typeof refreshTokenValue !== 'string') {
+    return next(
+      RequestError.withMessageAndCode(
+        'A refresh token is required to refresh the session.',
+        400
+      )
+    )
+  }
+
+  try {
+    const user = await User.validateRefreshToken(refreshTokenValue)
+    if (!user) {
+      await User.revokeSession(refreshTokenValue)
+      return next(RequestError.notAuthorized())
+    }
+
+    await User.revokeSession(refreshTokenValue)
+
+    const { accessToken, refreshToken } = await user.generateTokens({
+      userAgent: req.get('user-agent') ?? undefined,
+      ip: req.ip,
+    })
+
+    return res.status(200).json({
+      user: {
+        id: user.id,
+        verified: user.verified,
+        displayName: user.displayName,
+        username: user.username,
+        email: user.email,
+        profilePicURL: getUploadURL(user.profilePicURL),
+      },
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+      message: 'Session has been refreshed.',
+    })
+  } catch (error) {
+    return next(
+      RequestError.withMessageAndCode(
+        'There was an error refreshing the session.',
         500
       )
     )

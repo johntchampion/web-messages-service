@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken'
 import Message, { ContentType } from '../models/message'
 import Conversation from '../models/conversation'
 import User from '../models/user'
-import { AuthToken } from '../models/user'
+import { AccessToken } from '../models/user'
 import { getUploadURL } from './upload'
 
 /**
@@ -27,7 +27,7 @@ const authenticateSocketEvent = (
     const decodedToken = jwt.verify(
       token,
       process.env.TOKEN_SECRET as string
-    ) as AuthToken
+    ) as AccessToken
     return {
       userId: decodedToken.userId,
       verified: decodedToken.verified,

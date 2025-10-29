@@ -10,7 +10,7 @@ const pool = new Pool({
 
 const query = (
   query: string,
-  params: (string | boolean | null | undefined)[]
+  params: (string | number | boolean | null | undefined)[]
 ): Promise<pg.QueryResult> => {
   return pool.query(query, params)
 }

@@ -1,16 +1,14 @@
 import { Request, Response, NextFunction } from 'express'
-import jwt from 'jsonwebtoken'
 import { authentication, authorization } from '../../middleware/auth'
 import RequestError from '../../util/error'
-
-jest.mock('jsonwebtoken')
-
-const mockJwt = jwt as jest.Mocked<typeof jwt>
+import User from '../../models/user'
 
 describe('Authentication Middleware', () => {
   let mockRequest: Partial<Request>
   let mockResponse: Partial<Response>
   let nextFunction: NextFunction
+
+  let validateAccessTokenSpy: jest.SpyInstance
 
   beforeEach(() => {
     mockRequest = {
@@ -18,18 +16,19 @@ describe('Authentication Middleware', () => {
     }
     mockResponse = {}
     nextFunction = jest.fn()
-    process.env.TOKEN_SECRET = 'test-secret'
+    validateAccessTokenSpy = jest.spyOn(User, 'validateAccessToken')
   })
 
   afterEach(() => {
+    validateAccessTokenSpy.mockRestore()
     jest.clearAllMocks()
   })
 
   describe('authentication', () => {
-    it('should set userId to null when no Authorization header', () => {
+    it('should set userId to null when no Authorization header', async () => {
       ;(mockRequest.get as jest.Mock).mockReturnValue(undefined)
 
-      authentication(
+      await authentication(
         mockRequest as Request,
         mockResponse as Response,
         nextFunction
@@ -37,41 +36,36 @@ describe('Authentication Middleware', () => {
 
       expect(mockRequest.userId).toBeNull()
       expect(nextFunction).toHaveBeenCalled()
+      expect(validateAccessTokenSpy).not.toHaveBeenCalled()
     })
 
-    it('should authenticate valid JWT token', () => {
+    it('should authenticate valid access token', async () => {
       const token = 'valid.jwt.token'
-      const decodedToken = {
-        userId: 'user-123',
-        verified: true,
-      }
-
       ;(mockRequest.get as jest.Mock).mockReturnValue(`Bearer ${token}`)
-      mockJwt.verify.mockReturnValue(decodedToken as any)
 
-      authentication(
+      const user = new User({ id: 'user-123', verified: true })
+      validateAccessTokenSpy.mockResolvedValue(user)
+
+      await authentication(
         mockRequest as Request,
         mockResponse as Response,
         nextFunction
       )
 
-      expect(mockJwt.verify).toHaveBeenCalledWith(token, 'test-secret')
+      expect(validateAccessTokenSpy).toHaveBeenCalledWith(token)
       expect(mockRequest.userId).toBe('user-123')
       expect(mockRequest.verified).toBe(true)
       expect(nextFunction).toHaveBeenCalled()
     })
 
-    it('should authenticate unverified user', () => {
+    it('should authenticate unverified user', async () => {
       const token = 'valid.jwt.token'
-      const decodedToken = {
-        userId: 'user-456',
-        verified: false,
-      }
-
       ;(mockRequest.get as jest.Mock).mockReturnValue(`Bearer ${token}`)
-      mockJwt.verify.mockReturnValue(decodedToken as any)
 
-      authentication(
+      const user = new User({ id: 'user-456', verified: false })
+      validateAccessTokenSpy.mockResolvedValue(user)
+
+      await authentication(
         mockRequest as Request,
         mockResponse as Response,
         nextFunction
@@ -82,15 +76,13 @@ describe('Authentication Middleware', () => {
       expect(nextFunction).toHaveBeenCalled()
     })
 
-    it('should set userId to null when JWT verification fails', () => {
+    it('should set userId to null when access token validation fails', async () => {
       const token = 'invalid.jwt.token'
 
       ;(mockRequest.get as jest.Mock).mockReturnValue(`Bearer ${token}`)
-      mockJwt.verify.mockImplementation(() => {
-        throw new Error('Invalid token')
-      })
+      validateAccessTokenSpy.mockRejectedValue(new Error('Invalid token'))
 
-      authentication(
+      await authentication(
         mockRequest as Request,
         mockResponse as Response,
         nextFunction
@@ -100,13 +92,13 @@ describe('Authentication Middleware', () => {
       expect(nextFunction).toHaveBeenCalled()
     })
 
-    it('should set userId to null when decoded token is falsy', () => {
+    it('should set userId to null when validation returns null', async () => {
       const token = 'valid.jwt.token'
 
       ;(mockRequest.get as jest.Mock).mockReturnValue(`Bearer ${token}`)
-      mockJwt.verify.mockReturnValue(null as any)
+      validateAccessTokenSpy.mockResolvedValue(null)
 
-      authentication(
+      await authentication(
         mockRequest as Request,
         mockResponse as Response,
         nextFunction
@@ -116,37 +108,29 @@ describe('Authentication Middleware', () => {
       expect(nextFunction).toHaveBeenCalled()
     })
 
-    it('should extract token from Authorization header with Bearer scheme', () => {
+    it('should extract token from Authorization header with Bearer scheme', async () => {
       const token = 'my.jwt.token'
-      const decodedToken = {
-        userId: 'user-789',
-        verified: true,
-      }
 
       ;(mockRequest.get as jest.Mock).mockReturnValue(`Bearer ${token}`)
-      mockJwt.verify.mockReturnValue(decodedToken as any)
+      const user = new User({ id: 'user-789', verified: true })
+      validateAccessTokenSpy.mockResolvedValue(user)
 
-      authentication(
+      await authentication(
         mockRequest as Request,
         mockResponse as Response,
         nextFunction
       )
 
-      expect(mockJwt.verify).toHaveBeenCalledWith(token, 'test-secret')
+      expect(validateAccessTokenSpy).toHaveBeenCalledWith(token)
       expect(mockRequest.userId).toBe('user-789')
     })
 
-    it('should handle Authorization header with extra spaces', () => {
+    it('should handle Authorization header with extra spaces', async () => {
       const token = 'my.jwt.token'
-      const decodedToken = {
-        userId: 'user-999',
-        verified: false,
-      }
-
       ;(mockRequest.get as jest.Mock).mockReturnValue(`Bearer  ${token}`)
-      mockJwt.verify.mockReturnValue(decodedToken as any)
+      validateAccessTokenSpy.mockResolvedValue(null)
 
-      authentication(
+      await authentication(
         mockRequest as Request,
         mockResponse as Response,
         nextFunction
@@ -155,26 +139,6 @@ describe('Authentication Middleware', () => {
       // The token extraction uses split(' ')[1], so extra spaces might cause issues
       // This test verifies the behavior
       expect(nextFunction).toHaveBeenCalled()
-    })
-
-    it('should use TOKEN_SECRET from environment', () => {
-      process.env.TOKEN_SECRET = 'custom-secret'
-      const token = 'valid.jwt.token'
-      const decodedToken = {
-        userId: 'user-123',
-        verified: true,
-      }
-
-      ;(mockRequest.get as jest.Mock).mockReturnValue(`Bearer ${token}`)
-      mockJwt.verify.mockReturnValue(decodedToken as any)
-
-      authentication(
-        mockRequest as Request,
-        mockResponse as Response,
-        nextFunction
-      )
-
-      expect(mockJwt.verify).toHaveBeenCalledWith(token, 'custom-secret')
     })
   })
 
@@ -265,21 +229,18 @@ describe('Authentication Middleware', () => {
   })
 
   describe('authentication and authorization integration', () => {
-    it('should authenticate and authorize valid user', () => {
+    it('should authenticate and authorize valid user', async () => {
       const token = 'valid.jwt.token'
-      const decodedToken = {
-        userId: 'user-123',
-        verified: true,
-      }
-
       ;(mockRequest.get as jest.Mock).mockReturnValue(`Bearer ${token}`)
-      mockJwt.verify.mockReturnValue(decodedToken as any)
+
+      const user = new User({ id: 'user-123', verified: true })
+      validateAccessTokenSpy.mockResolvedValue(user)
 
       const authNext = jest.fn()
       const authzNext = jest.fn()
 
       // First authenticate
-      authentication(mockRequest as Request, mockResponse as Response, authNext)
+      await authentication(mockRequest as Request, mockResponse as Response, authNext)
 
       expect(authNext).toHaveBeenCalled()
       expect(mockRequest.userId).toBe('user-123')
@@ -290,13 +251,13 @@ describe('Authentication Middleware', () => {
       expect(authzNext).toHaveBeenCalled()
     })
 
-    it('should authenticate but fail authorization when no token provided', () => {
+    it('should authenticate but fail authorization when no token provided', async () => {
       ;(mockRequest.get as jest.Mock).mockReturnValue(undefined)
 
       const authNext = jest.fn()
 
       // First authenticate (sets userId to null)
-      authentication(mockRequest as Request, mockResponse as Response, authNext)
+      await authentication(mockRequest as Request, mockResponse as Response, authNext)
 
       expect(authNext).toHaveBeenCalled()
       expect(mockRequest.userId).toBeNull()

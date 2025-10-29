@@ -277,7 +277,7 @@ describe('User Model', () => {
         .mockResolvedValueOnce(createMockQueryResult([updatedRow], 1))
 
       const user = new User({ id: 'test-user-id' })
-      await user.verify('123456')
+      await user.setVerifiedStatus('123456')
 
       expect(user.verified).toBe(true)
       expect(user.verifyToken).toBeNull()
@@ -286,7 +286,7 @@ describe('User Model', () => {
     it('should throw error when user has no id', async () => {
       const user = new User()
 
-      await expect(user.verify('123456')).rejects.toThrow(
+      await expect(user.setVerifiedStatus('123456')).rejects.toThrow(
         'User is not yet saved to the database.'
       )
     })
@@ -297,7 +297,7 @@ describe('User Model', () => {
 
       const user = new User({ id: 'test-user-id' })
 
-      await expect(user.verify('123456')).rejects.toThrow(
+      await expect(user.setVerifiedStatus('123456')).rejects.toThrow(
         'No verification token set.'
       )
     })
@@ -311,7 +311,7 @@ describe('User Model', () => {
 
       const user = new User({ id: 'test-user-id' })
 
-      await expect(user.verify('654321')).rejects.toThrow(
+      await expect(user.setVerifiedStatus('654321')).rejects.toThrow(
         'The verification token is incorrect.'
       )
     })
@@ -326,7 +326,7 @@ describe('User Model', () => {
 
       const user = new User({ id: 'test-user-id' })
 
-      await expect(user.verify('123456')).rejects.toThrow(
+      await expect(user.setVerifiedStatus('123456')).rejects.toThrow(
         'The verification token is expired. You need to request a new one.'
       )
     })
@@ -340,16 +340,16 @@ describe('User Model', () => {
       mockQuery.mockResolvedValue(createMockQueryResult([updatedRow], 1))
 
       const user = new User({ id: 'test-user-id' })
-      await user.beginPasswordReset('reset-token-123')
+      await user.beginPasswordReset()
 
       expect(mockQuery).toHaveBeenCalled()
-      expect(user.resetPasswordToken).toBe('reset-token-123')
+      expect(user.resetPasswordToken).toBeDefined()
     })
 
     it('should throw error when user has no id', async () => {
       const user = new User()
 
-      await expect(user.beginPasswordReset('token')).rejects.toThrow(
+      await expect(user.beginPasswordReset()).rejects.toThrow(
         'User is not yet saved to the database.'
       )
     })
@@ -365,10 +365,16 @@ describe('User Model', () => {
         reset_password_token: null,
         hashed_password: 'new-hashed-password',
       })
+      const tokenVersionRow = createMockUserRow({
+        reset_password_token: null,
+        token_version: (updatedRow.token_version || 0) + 1,
+      })
 
       mockQuery
         .mockResolvedValueOnce(createMockQueryResult([mockRow], 1))
         .mockResolvedValueOnce(createMockQueryResult([updatedRow], 1))
+        .mockResolvedValueOnce(createMockQueryResult([tokenVersionRow], 1))
+        .mockResolvedValueOnce(createMockQueryResult([], 1))
 
       const user = new User({ id: 'test-user-id' })
       await user.completePasswordReset('reset-token-123', 'newpassword')

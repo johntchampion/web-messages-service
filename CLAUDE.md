@@ -108,7 +108,7 @@ All models follow a consistent pattern:
 - Email verification with 6-digit codes (15-minute expiry)
 - Password reset with crypto tokens (1-hour expiry)
 - Static finders: `findById()`, `findByEmail()`, `findByUsername()`, `findByResetPasswordToken()`, `findBySocketId()`
-- Instance methods: `create()`, `update()`, `delete()`, `verify()`, `verifyPassword()`, `sendVerificationEmail()`, `sendPasswordResetEmail()`
+- Instance methods: `create()`, `update()`, `delete()`, `setVerifiedStatus()`, `verifyPassword()`, `sendVerificationEmail()`, `sendPasswordResetEmail()`
 
 **Message** (`src/models/message.ts`):
 
@@ -132,12 +132,43 @@ JWT-based authentication implemented in `src/middleware/auth.ts`:
 
 - `authentication` middleware: Extracts JWT from `Authorization: Bearer <token>` header, validates it, and sets `req.userId` and `req.verified`
 - `authorization` middleware: Ensures `req.userId` exists (user must be logged in)
-- Auth tokens contain: `{ userId: string, verified: boolean }` and expire in 1 hour
+- Access tokens contain: `{ userId: string, verified: boolean, tokenVersion: number }` and expire in 1 hour
 - `verified` field tracks email verification status (if `VERIFY_USERS=true`)
 
 Additional middleware:
 
 - `src/middleware/verified.ts` - Ensures user has verified their email
+
+**Token Refresh System:**
+
+The application uses a dual-token system for enhanced security:
+
+- **Access Tokens** (1 hour expiry):
+
+  - Contains `userId`, `verified`, and `tokenVersion`
+  - Used for authenticating API requests
+  - Short-lived for security
+  - Validated against `tokenVersion` on the user record
+
+- **Refresh Tokens** (7 days expiry):
+
+  - Contains only `userId`
+  - Used exclusively to obtain new access tokens
+  - Stored in `sessions` database table
+  - Longer-lived for user convenience
+
+- **Sessions Table**:
+
+  - Tracks all issued refresh tokens
+  - Enables server-side token revocation
+  - Allows invalidation on password change
+
+- **Token Versioning & Invalidation**:
+  - User model has `tokenVersion` field (integer)
+  - When user changes password, `tokenVersion` increments
+  - This invalidates all existing access tokens and refresh tokens
+  - Provides automatic logout across all devices on password change
+  - Both access and refresh tokens are validated against current `tokenVersion`
 
 ### Socket.IO Real-time Messaging
 
@@ -175,12 +206,13 @@ Routes use `express-validator` for input validation:
 
 **Auth Routes** (`/auth/*`):
 
-- `PUT /auth/login` - Email/password login
-- `POST /auth/signup` - Create new account
+- `PUT /auth/login` - Email/password login (returns access token and refresh token)
+- `POST /auth/signup` - Create new account (returns access token and refresh token)
+- `PUT /auth/refresh` - Get new access token using refresh token
 - `PUT /auth/confirm-email` - Verify email with 6-digit code
 - `PUT /auth/resend-verification-code` - Request new verification email
 - `PUT /auth/request-new-password` - Start password reset flow
-- `PUT /auth/reset-password` - Complete password reset with token
+- `PUT /auth/reset-password` - Complete password reset with token (invalidates all sessions)
 - `DELETE /auth/delete-account` - Delete user account
 - `GET /auth/ping` - Check authentication status
 
@@ -230,10 +262,12 @@ Models use partial updates - only fields present in the patch object are updated
 
 ### Token Expiry
 
-- JWT tokens: 1 hour
+- Access tokens (JWT): 1 hour
+- Refresh tokens (JWT): 7 days
 - Email verification codes: 15 minutes
 - Password reset tokens: 1 hour
 - Token timestamp fields (`verify_token_timestamp`, `reset_password_token_timestamp`) are managed by database triggers
+- Token versioning: User's `tokenVersion` field increments on password change, invalidating all existing access and refresh tokens
 
 ### Testing
 
