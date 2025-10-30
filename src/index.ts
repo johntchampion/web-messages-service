@@ -35,6 +35,7 @@ app.get('/health-check', (req: Request, res: Response, next: NextFunction) => {
     message: 'Alive and well.',
     features: {
       verifyUsersEnabled: process.env.VERIFY_USERS === 'true',
+      emailSendingEnabled: process.env.ENABLE_EMAILS === 'true',
       imageUploadsEnabled: process.env.ENABLE_UPLOADS == 'true',
     },
   })
