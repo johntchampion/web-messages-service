@@ -18,9 +18,10 @@ This backend service was made to support the web app that was made alongside it.
 | APP_BASE_URL     | Frontend application URL for password reset links.    | https://your.site     |
 | BASE_URL         | Backend application URL for the image base URL links. | https://api.your.site |
 | VERIFY_USERS     | Set to 'true' to enable email verification.           | true                  |
+| SEND_EMAILS      | Set to 'true' to enable any email sending.            | true                  |
 | ENABLE_UPLOADS   | Set to 'true' to enable image uploads.                | true                  |
 | SENDGRID_API_KEY | API key to authenticate with SendGrid                 | apikey                |
-| NODE_ENV         | Set to 'prod' to enable email sending.                | test                  |
+| NODE_ENV         | Set to 'test' to enable additional logging.           | test                  |
 
 ## Running on your Local Machine
 

@@ -60,9 +60,10 @@ Required environment variables (create a `.env` file in the root):
 - `APP_BASE_URL` - Frontend application URL for password reset links
 - `BASE_URL` - Backend application URL for the image base URL links
 - `VERIFY_USERS` - Set to 'true' to enable email verification
+- `SEND_EMAILS` - Set to 'true' to enable any email sending
 - `ENABLE_UPLOADS` - Set to 'true' to enable image uploads
 - `SENDGRID_API_KEY` - API key to authenticate with SendGrid
-- `NODE_ENV` - Set to 'test' to disable email sending
+- `NODE_ENV` - Set to 'test' to enable additional logging
 
 ## Architecture
 

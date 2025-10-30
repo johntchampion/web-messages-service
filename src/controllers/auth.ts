@@ -166,7 +166,7 @@ export const signUp = async (
     await newUser.create()
     if (
       email &&
-      process.env.NODE_ENV === 'production' &&
+      process.env.SEND_EMAILS === 'true' &&
       process.env.VERIFY_USERS === 'true'
     ) {
       await newUser.sendVerificationEmail()
@@ -273,7 +273,7 @@ export const resendEmailVerificationCode = async (
     await user.update({ verifyToken: User.generateVerifyToken() })
 
     if (
-      process.env.NODE_ENV === 'production' &&
+      process.env.SEND_EMAILS === 'true' &&
       process.env.VERIFY_USERS === 'true' &&
       user.email
     ) {
@@ -329,7 +329,7 @@ export const requestPasswordReset = async (
     )
   }
 
-  if (process.env.NODE_ENV === 'production' && user.email) {
+  if (process.env.SEND_EMAILS === 'true' && user.email) {
     try {
       await user.sendPasswordResetEmail()
     } catch (error) {
