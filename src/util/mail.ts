@@ -17,9 +17,9 @@ const sendEmail = (
               name: toName,
             },
           ],
-          subject: subject,
         },
       ],
+      subject: subject,
       content: [
         {
           type: 'text/html',
@@ -27,7 +27,7 @@ const sendEmail = (
         },
       ],
       from: {
-        email: `noreply@${process.env.APP_BASE_URL}`,
+        email: `noreply@${process.env.APP_BASE_URL?.replace('https://', '')}`,
         name: 'Messenger Hawk',
       },
     },
