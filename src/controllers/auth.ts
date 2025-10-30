@@ -340,6 +340,14 @@ export const resetPassword = async (
   res: Response,
   next: NextFunction
 ) => {
+  const errors = validationResult(req)
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      message: errors.array()[0].msg,
+      errors: errors.array(),
+    })
+  }
+
   const resetPasswordToken = req.body.resetPasswordToken
   const newPassword = req.body.newPassword
 

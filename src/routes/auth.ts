@@ -60,7 +60,18 @@ router.put(
   authController.requestPasswordReset
 )
 
-router.put('/reset-password', authController.resetPassword)
+router.put(
+  '/reset-password',
+  body('resetPasswordToken')
+    .isString()
+    .withMessage('Reset password token is required.')
+    .notEmpty()
+    .withMessage('Reset password token cannot be empty.'),
+  body('newPassword')
+    .isLength({ min: 4 })
+    .withMessage('Password must be at least four characters.'),
+  authController.resetPassword
+)
 
 router.post(
   '/logout',
