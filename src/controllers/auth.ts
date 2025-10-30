@@ -166,10 +166,12 @@ export const signUp = async (
     await newUser.create()
     if (
       email &&
-      process.env.NODE_ENV !== 'test' &&
+      process.env.NODE_ENV === 'production' &&
       process.env.VERIFY_USERS === 'true'
     ) {
       await newUser.sendVerificationEmail()
+    } else if (process.env.NODE_ENV === 'test') {
+      console.log('Verification code: ', newUser.verifyToken)
     }
 
     const { accessToken, refreshToken } = await newUser.generateTokens({
@@ -270,8 +272,14 @@ export const resendEmailVerificationCode = async (
 
     await user.update({ verifyToken: User.generateVerifyToken() })
 
-    if (process.env.NODE_ENV !== 'test') {
+    if (
+      process.env.NODE_ENV === 'production' &&
+      process.env.VERIFY_USERS === 'true' &&
+      user.email
+    ) {
       await user.sendVerificationEmail()
+    } else if (process.env.NODE_ENV === 'test') {
+      console.log('Verification code: ', user.verifyToken)
     }
 
     return res.status(200).json({
@@ -321,12 +329,14 @@ export const requestPasswordReset = async (
     )
   }
 
-  if (process.env.NODE_ENV !== 'test') {
+  if (process.env.NODE_ENV === 'production' && user.email) {
     try {
       await user.sendPasswordResetEmail()
     } catch (error) {
       console.log(JSON.stringify(error))
     }
+  } else if (process.env.NODE_ENV === 'test') {
+    console.log('Password reset token: ', user.resetPasswordToken)
   }
 
   return res.status(200).json({
@@ -353,6 +363,15 @@ export const resetPassword = async (
 
   try {
     const user = await User.findByResetPasswordToken(resetPasswordToken)
+    if (!user) {
+      return next(
+        RequestError.withMessageAndCode(
+          'The password reset token is invalid.',
+          400
+        )
+      )
+    }
+
     await user?.completePasswordReset(resetPasswordToken, newPassword)
 
     return res.status(200).json({

@@ -2,16 +2,24 @@
 
 This is a basic backend service to support a messaging web app. It has REST API endpoints for certain functions and offers real-time message support with Socket.IO.
 
-This backend service was made to support the web app that was made alongside it. You can find the codebase for that project [here](https://github.com/appdevjohn/web-messages). In addition, this project requires a running PostgreSQL database, the setup of which can be found [here](https://github.com/appdevjohn/web-messages-db).
+This backend service was made to support the web app that was made alongside it. You can find the codebase for that project [here](https://github.com/appdevjohn/web-messages-pwa). In addition, this project requires a running PostgreSQL database, the setup of which can be found [here](https://github.com/appdevjohn/web-messages-db).
 
 ## Required Environment Variables
 
-| Name       | Description                                | Example     |
-| ---------- | ------------------------------------------ | ----------- |
-| PGUSER     | The user for the PostgreSQL database.      | user        |
-| PGHOST     | The host name for the database.            | localhost   |
-| PGDATABASE | The database name.                         | messages_db |
-| PGPASSWORD | The password for the user of the database. | password1   |
+| Name           | Description                                           | Example               |
+| -------------- | ----------------------------------------------------- | --------------------- |
+| PGUSER         | The user for the PostgreSQL database.                 | user                  |
+| PGHOST         | The host name for the database.                       | localhost             |
+| PGDATABASE     | The database name.                                    | messages_db           |
+| PGPASSWORD     | The password for the user of the database.            | password1             |
+| PGPORT         | The port for the database.                            | 5432                  |
+| PORT           | The port which the application runs.                  | 8000                  |
+| TOKEN_SECRET   | JWT signing secret.                                   | secretsecret          |
+| APP_BASE_URL   | Frontend application URL for password reset links.    | https://your.site     |
+| BASE_URL       | Backend application URL for the image base URL links. | https://api.your.site |
+| VERIFY_USERS   | Set to 'true' to enable email verification.           | true                  |
+| ENABLE_UPLOADS | Set to 'true' to enable image uploads.                | true                  |
+| NODE_ENV       | Set to 'prod' to enable email sending.                | test                  |
 
 ## Running on your Local Machine
 
