@@ -61,6 +61,7 @@ Required environment variables (create a `.env` file in the root):
 - `BASE_URL` - Backend application URL for the image base URL links
 - `VERIFY_USERS` - Set to 'true' to enable email verification
 - `ENABLE_UPLOADS` - Set to 'true' to enable image uploads
+- `SENDGRID_API_KEY` - API key to authenticate with SendGrid
 - `NODE_ENV` - Set to 'test' to disable email sending
 
 ## Architecture

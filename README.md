@@ -6,20 +6,21 @@ This backend service was made to support the web app that was made alongside it.
 
 ## Required Environment Variables
 
-| Name           | Description                                           | Example               |
-| -------------- | ----------------------------------------------------- | --------------------- |
-| PGUSER         | The user for the PostgreSQL database.                 | user                  |
-| PGHOST         | The host name for the database.                       | localhost             |
-| PGDATABASE     | The database name.                                    | messages_db           |
-| PGPASSWORD     | The password for the user of the database.            | password1             |
-| PGPORT         | The port for the database.                            | 5432                  |
-| PORT           | The port which the application runs.                  | 8000                  |
-| TOKEN_SECRET   | JWT signing secret.                                   | secretsecret          |
-| APP_BASE_URL   | Frontend application URL for password reset links.    | https://your.site     |
-| BASE_URL       | Backend application URL for the image base URL links. | https://api.your.site |
-| VERIFY_USERS   | Set to 'true' to enable email verification.           | true                  |
-| ENABLE_UPLOADS | Set to 'true' to enable image uploads.                | true                  |
-| NODE_ENV       | Set to 'prod' to enable email sending.                | test                  |
+| Name             | Description                                           | Example               |
+| ---------------- | ----------------------------------------------------- | --------------------- |
+| PGUSER           | The user for the PostgreSQL database.                 | user                  |
+| PGHOST           | The host name for the database.                       | localhost             |
+| PGDATABASE       | The database name.                                    | messages_db           |
+| PGPASSWORD       | The password for the user of the database.            | password1             |
+| PGPORT           | The port for the database.                            | 5432                  |
+| PORT             | The port which the application runs.                  | 8000                  |
+| TOKEN_SECRET     | JWT signing secret.                                   | secretsecret          |
+| APP_BASE_URL     | Frontend application URL for password reset links.    | https://your.site     |
+| BASE_URL         | Backend application URL for the image base URL links. | https://api.your.site |
+| VERIFY_USERS     | Set to 'true' to enable email verification.           | true                  |
+| ENABLE_UPLOADS   | Set to 'true' to enable image uploads.                | true                  |
+| SENDGRID_API_KEY | API key to authenticate with SendGrid                 | apikey                |
+| NODE_ENV         | Set to 'prod' to enable email sending.                | test                  |
 
 ## Running on your Local Machine
 
