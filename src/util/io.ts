@@ -59,7 +59,7 @@ export const setupSocketIO = (server: http.Server) => {
      * REST equivalent: GET /messages
      * Params: { convoId, limit?, before?, after?, order?, token? }
      */
-    socket.on('list-messages', async (params) => {
+    socket.on('list-messages', async (params = {}) => {
       const { convoId, limit, before, after, order, token } = params
 
       if (!convoId) {
@@ -157,7 +157,7 @@ export const setupSocketIO = (server: http.Server) => {
      * REST equivalent: POST /message
      * Params: { convoId, content, userName?, userAvatar?, token? }
      */
-    socket.on('create-message', async (params) => {
+    socket.on('create-message', async (params = {}) => {
       const { convoId, content, userName, userAvatar, token } = params
 
       if (!convoId || !content) {
@@ -219,7 +219,7 @@ export const setupSocketIO = (server: http.Server) => {
      * REST equivalent: GET /conversations
      * Params: { token }
      */
-    socket.on('list-conversations', async (params) => {
+    socket.on('list-conversations', async (params = {}) => {
       const { token } = params
 
       const auth = authenticateSocketEvent(token)
@@ -260,7 +260,7 @@ export const setupSocketIO = (server: http.Server) => {
      * REST equivalent: GET /conversations/:convoId
      * Params: { convoId }
      */
-    socket.on('get-conversation', async (params) => {
+    socket.on('get-conversation', async (params = {}) => {
       const { convoId } = params
 
       if (!convoId) {
@@ -298,7 +298,7 @@ export const setupSocketIO = (server: http.Server) => {
      * REST equivalent: POST /conversations
      * Params: { name, token? }
      */
-    socket.on('create-conversation', async (params) => {
+    socket.on('create-conversation', async (params = {}) => {
       const { name, token } = params
 
       if (!name) {
@@ -342,7 +342,7 @@ export const setupSocketIO = (server: http.Server) => {
      * REST equivalent: PUT /conversations/:convoId
      * Params: { convoId, name, token? }
      */
-    socket.on('update-conversation', async (params) => {
+    socket.on('update-conversation', async (params = {}) => {
       const { convoId, name, token } = params
 
       if (!convoId) {
@@ -410,7 +410,7 @@ export const setupSocketIO = (server: http.Server) => {
      * REST equivalent: DELETE /conversations/:convoId
      * Params: { convoId }
      */
-    socket.on('delete-conversation', async (params) => {
+    socket.on('delete-conversation', async (params = {}) => {
       const { convoId } = params
 
       if (!convoId) {
@@ -452,7 +452,7 @@ export const setupSocketIO = (server: http.Server) => {
      * Join a conversation room to receive real-time updates.
      * Params: { convoId }
      */
-    socket.on('join-conversation', async (params) => {
+    socket.on('join-conversation', async (params = {}) => {
       const { convoId } = params
 
       if (!convoId) {
@@ -481,7 +481,7 @@ export const setupSocketIO = (server: http.Server) => {
      * Leave a conversation room to stop receiving real-time updates.
      * Params: { convoId }
      */
-    socket.on('leave-conversation', async (params) => {
+    socket.on('leave-conversation', async (params = {}) => {
       const { convoId } = params
 
       if (!convoId) {
