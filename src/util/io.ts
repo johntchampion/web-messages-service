@@ -2,7 +2,7 @@ import http from 'http'
 import { Server, Socket } from 'socket.io'
 import jwt from 'jsonwebtoken'
 
-import Message, { ContentType } from '../models/message'
+import Message from '../models/message'
 import Conversation from '../models/conversation'
 import User from '../models/user'
 import { AccessToken } from '../models/user'
@@ -14,13 +14,21 @@ import { getUploadURL } from './upload'
 let io: Server
 
 /**
+ * Result of socket event authentication
+ */
+type AuthResult =
+  | { success: true; userId: string; verified: boolean; user: User }
+  | { success: false; error: string }
+  | null // null means no token was provided
+
+/**
  * Authenticates a socket event by verifying the provided JWT token.
  * @param token JWT token to verify
- * @returns Object containing userId and verified status, or null if invalid
+ * @returns Authentication result with explicit error messages for invalid/expired tokens
  */
-const authenticateSocketEvent = (
+const authenticateSocketEvent = async (
   token?: string
-): { userId: string; verified: boolean } | null => {
+): Promise<AuthResult> => {
   if (!token) return null
 
   try {
@@ -28,12 +36,36 @@ const authenticateSocketEvent = (
       token,
       process.env.TOKEN_SECRET as string
     ) as AccessToken
+
+    // Validate tokenVersion against the user's current tokenVersion
+    const user = await User.findById(decodedToken.userId)
+    if (!user) {
+      return { success: false, error: 'User not found.' }
+    }
+
+    if (user.tokenVersion !== decodedToken.tokenVersion) {
+      return {
+        success: false,
+        error: 'Token has been invalidated. Please log in again.',
+      }
+    }
+
     return {
+      success: true,
       userId: decodedToken.userId,
       verified: decodedToken.verified,
+      user,
     }
   } catch (error) {
-    return null
+    if (error instanceof jwt.TokenExpiredError) {
+      return { success: false, error: 'Token has expired.' }
+    } else if (error instanceof jwt.JsonWebTokenError) {
+      return { success: false, error: 'Invalid token.' }
+    } else if (error instanceof jwt.NotBeforeError) {
+      return { success: false, error: 'Token not yet valid.' }
+    } else {
+      return { success: false, error: 'Authentication failed.' }
+    }
   }
 }
 
@@ -57,15 +89,15 @@ export const setupSocketIO = (server: http.Server) => {
     /**
      * List messages in a conversation with cursor-based pagination.
      * REST equivalent: GET /messages
-     * Params: { convoId, limit?, before?, after?, order?, token? }
+     * Params: { convoId, limit?, before?, after?, order? }
      */
-    socket.on('list-messages', async (params = {}) => {
-      const { convoId, limit, before, after, order, token } = params
+    socket.on('list-messages', async (params = {}, callback) => {
+      const { convoId, limit, before, after, order } = params
 
       if (!convoId) {
-        socket.emit('error', {
-          event: 'list-messages',
-          message: 'Conversation ID is required.',
+        callback({
+          success: false,
+          error: 'Conversation ID is required.',
         })
         return
       }
@@ -131,8 +163,8 @@ export const setupSocketIO = (server: http.Server) => {
           return messageData
         })
 
-        socket.emit('response', {
-          event: 'list-messages',
+        callback({
+          success: true,
           data: {
             messages: enrichedMessages,
             pageInfo: result.pageInfo,
@@ -145,9 +177,9 @@ export const setupSocketIO = (server: http.Server) => {
           error instanceof Error
             ? error.message
             : 'There was an error getting the messages.'
-        socket.emit('error', {
-          event: 'list-messages',
-          message,
+        callback({
+          success: false,
+          error: message,
         })
       }
     })
@@ -157,20 +189,31 @@ export const setupSocketIO = (server: http.Server) => {
      * REST equivalent: POST /message
      * Params: { convoId, content, userName?, userAvatar?, token? }
      */
-    socket.on('create-message', async (params = {}) => {
+    socket.on('create-message', async (params = {}, callback) => {
       const { convoId, content, userName, userAvatar, token } = params
 
       if (!convoId || !content) {
-        socket.emit('error', {
-          event: 'create-message',
-          message: 'Conversation ID and content are required.',
+        callback({
+          success: false,
+          error: 'Conversation ID and content are required.',
         })
         return
       }
 
       try {
-        const auth = authenticateSocketEvent(token)
-        const user = auth ? await User.findById(auth.userId) : null
+        const auth = await authenticateSocketEvent(token)
+
+        // If a token was provided but is invalid, return explicit error
+        if (auth !== null && !auth.success) {
+          callback({
+            success: false,
+            error: auth.error,
+          })
+          return
+        }
+
+        // Use the user object from auth result (no need to query again)
+        const user = auth && auth.success ? auth.user : null
 
         const newMessage = new Message({
           convoId,
@@ -190,8 +233,8 @@ export const setupSocketIO = (server: http.Server) => {
             : newMessage.senderAvatar,
         }
 
-        socket.emit('response', {
-          event: 'create-message',
+        callback({
+          success: true,
           data: { message: messageResponse },
         })
 
@@ -205,9 +248,9 @@ export const setupSocketIO = (server: http.Server) => {
           error instanceof Error
             ? error.message
             : 'There was an error sending the message.'
-        socket.emit('error', {
-          event: 'create-message',
-          message,
+        callback({
+          success: false,
+          error: message,
         })
       }
     })
@@ -219,14 +262,25 @@ export const setupSocketIO = (server: http.Server) => {
      * REST equivalent: GET /conversations
      * Params: { token }
      */
-    socket.on('list-conversations', async (params = {}) => {
+    socket.on('list-conversations', async (params = {}, callback) => {
       const { token } = params
 
-      const auth = authenticateSocketEvent(token)
+      const auth = await authenticateSocketEvent(token)
+
+      // No token provided
       if (!auth) {
-        socket.emit('error', {
-          event: 'list-conversations',
-          message: 'Authentication required.',
+        callback({
+          success: false,
+          error: 'Authentication required.',
+        })
+        return
+      }
+
+      // Token provided but invalid/expired
+      if (!auth.success) {
+        callback({
+          success: false,
+          error: auth.error,
         })
         return
       }
@@ -234,8 +288,8 @@ export const setupSocketIO = (server: http.Server) => {
       try {
         const conversations = await Conversation.findByUserId(auth.userId)
 
-        socket.emit('response', {
-          event: 'list-conversations',
+        callback({
+          success: true,
           data: {
             conversations: conversations.map((convo) => ({
               ...convo,
@@ -248,9 +302,9 @@ export const setupSocketIO = (server: http.Server) => {
           error instanceof Error
             ? error.message
             : 'There was an error getting the conversations.'
-        socket.emit('error', {
-          event: 'list-conversations',
-          message,
+        callback({
+          success: false,
+          error: message,
         })
       }
     })
@@ -260,13 +314,13 @@ export const setupSocketIO = (server: http.Server) => {
      * REST equivalent: GET /conversations/:convoId
      * Params: { convoId }
      */
-    socket.on('get-conversation', async (params = {}) => {
+    socket.on('get-conversation', async (params = {}, callback) => {
       const { convoId } = params
 
       if (!convoId) {
-        socket.emit('error', {
-          event: 'get-conversation',
-          message: 'Conversation ID is required.',
+        callback({
+          success: false,
+          error: 'Conversation ID is required.',
         })
         return
       }
@@ -274,8 +328,8 @@ export const setupSocketIO = (server: http.Server) => {
       try {
         const conversation = await Conversation.findById(convoId)
 
-        socket.emit('response', {
-          event: 'get-conversation',
+        callback({
+          success: true,
           data: {
             conversation,
             deletionDate: conversation.getDeletionDate(),
@@ -286,9 +340,9 @@ export const setupSocketIO = (server: http.Server) => {
           error instanceof Error
             ? error.message
             : 'There was an error getting the conversation.'
-        socket.emit('error', {
-          event: 'get-conversation',
-          message,
+        callback({
+          success: false,
+          error: message,
         })
       }
     })
@@ -298,28 +352,37 @@ export const setupSocketIO = (server: http.Server) => {
      * REST equivalent: POST /conversations
      * Params: { name, token? }
      */
-    socket.on('create-conversation', async (params = {}) => {
+    socket.on('create-conversation', async (params = {}, callback) => {
       const { name, token } = params
 
       if (!name) {
-        socket.emit('error', {
-          event: 'create-conversation',
-          message: 'A conversation name is required.',
+        callback({
+          success: false,
+          error: 'A conversation name is required.',
         })
         return
       }
 
       try {
-        const auth = authenticateSocketEvent(token)
+        const auth = await authenticateSocketEvent(token)
+
+        // If a token was provided but is invalid, return explicit error
+        if (auth !== null && !auth.success) {
+          callback({
+            success: false,
+            error: auth.error,
+          })
+          return
+        }
 
         const newConversation = new Conversation({
           name,
-          creatorId: auth ? auth.userId : null,
+          creatorId: auth && auth.success ? auth.userId : null,
         })
         await newConversation.update()
 
-        socket.emit('response', {
-          event: 'create-conversation',
+        callback({
+          success: true,
           data: {
             conversation: newConversation,
             deletionDate: newConversation.getDeletionDate(),
@@ -330,9 +393,9 @@ export const setupSocketIO = (server: http.Server) => {
           error instanceof Error
             ? error.message
             : 'There was an error creating the conversation.'
-        socket.emit('error', {
-          event: 'create-conversation',
-          message,
+        callback({
+          success: false,
+          error: message,
         })
       }
     })
@@ -342,37 +405,46 @@ export const setupSocketIO = (server: http.Server) => {
      * REST equivalent: PUT /conversations/:convoId
      * Params: { convoId, name, token? }
      */
-    socket.on('update-conversation', async (params = {}) => {
+    socket.on('update-conversation', async (params = {}, callback) => {
       const { convoId, name, token } = params
 
       if (!convoId) {
-        socket.emit('error', {
-          event: 'update-conversation',
-          message: 'Conversation ID is required.',
+        callback({
+          success: false,
+          error: 'Conversation ID is required.',
         })
         return
       }
 
       if (!name || name.length < 1) {
-        socket.emit('error', {
-          event: 'update-conversation',
-          message: 'A conversation name is required.',
+        callback({
+          success: false,
+          error: 'A conversation name is required.',
         })
         return
       }
 
       try {
         const conversation = await Conversation.findById(convoId)
-        const auth = authenticateSocketEvent(token)
+        const auth = await authenticateSocketEvent(token)
+
+        // If a token was provided but is invalid, return explicit error
+        if (auth !== null && !auth.success) {
+          callback({
+            success: false,
+            error: auth.error,
+          })
+          return
+        }
 
         // If conversation has a creator, only that creator can update it
         if (
           conversation.creatorId !== null &&
-          conversation.creatorId !== auth?.userId
+          conversation.creatorId !== (auth && auth.success ? auth.userId : null)
         ) {
-          socket.emit('error', {
-            event: 'update-conversation',
-            message: 'Only the creator can update this conversation.',
+          callback({
+            success: false,
+            error: 'Only the creator can update this conversation.',
           })
           return
         }
@@ -380,8 +452,8 @@ export const setupSocketIO = (server: http.Server) => {
         conversation.name = name
         await conversation.update()
 
-        socket.emit('response', {
-          event: 'update-conversation',
+        callback({
+          success: true,
           data: {
             conversation,
             deletionDate: conversation.getDeletionDate(),
@@ -398,9 +470,9 @@ export const setupSocketIO = (server: http.Server) => {
           error instanceof Error
             ? error.message
             : 'There was an error updating the conversation.'
-        socket.emit('error', {
-          event: 'update-conversation',
-          message,
+        callback({
+          success: false,
+          error: message,
         })
       }
     })
@@ -410,13 +482,13 @@ export const setupSocketIO = (server: http.Server) => {
      * REST equivalent: DELETE /conversations/:convoId
      * Params: { convoId }
      */
-    socket.on('delete-conversation', async (params = {}) => {
+    socket.on('delete-conversation', async (params = {}, callback) => {
       const { convoId } = params
 
       if (!convoId) {
-        socket.emit('error', {
-          event: 'delete-conversation',
-          message: 'Conversation ID is required.',
+        callback({
+          success: false,
+          error: 'Conversation ID is required.',
         })
         return
       }
@@ -425,8 +497,8 @@ export const setupSocketIO = (server: http.Server) => {
         const conversation = await Conversation.findById(convoId)
         await conversation.delete()
 
-        socket.emit('response', {
-          event: 'delete-conversation',
+        callback({
+          success: true,
           data: { success: true },
         })
 
@@ -439,9 +511,9 @@ export const setupSocketIO = (server: http.Server) => {
           error instanceof Error
             ? error.message
             : 'There was an error deleting the conversation.'
-        socket.emit('error', {
-          event: 'delete-conversation',
-          message,
+        callback({
+          success: false,
+          error: message,
         })
       }
     })
@@ -452,27 +524,27 @@ export const setupSocketIO = (server: http.Server) => {
      * Join a conversation room to receive real-time updates.
      * Params: { convoId }
      */
-    socket.on('join-conversation', async (params = {}) => {
+    socket.on('join-conversation', async (params = {}, callback) => {
       const { convoId } = params
 
       if (!convoId) {
-        socket.emit('error', {
-          event: 'join-conversation',
-          message: 'Conversation ID is required.',
+        callback({
+          success: false,
+          error: 'Conversation ID is required.',
         })
         return
       }
 
       try {
         await socket.join(convoId)
-        socket.emit('response', {
-          event: 'join-conversation',
+        callback({
+          success: true,
           data: { convoId, joined: true },
         })
       } catch (error) {
-        socket.emit('error', {
-          event: 'join-conversation',
-          message: 'There was an error joining the conversation.',
+        callback({
+          success: false,
+          error: 'There was an error joining the conversation.',
         })
       }
     })
@@ -481,27 +553,27 @@ export const setupSocketIO = (server: http.Server) => {
      * Leave a conversation room to stop receiving real-time updates.
      * Params: { convoId }
      */
-    socket.on('leave-conversation', async (params = {}) => {
+    socket.on('leave-conversation', async (params = {}, callback) => {
       const { convoId } = params
 
       if (!convoId) {
-        socket.emit('error', {
-          event: 'leave-conversation',
-          message: 'Conversation ID is required.',
+        callback({
+          success: false,
+          error: 'Conversation ID is required.',
         })
         return
       }
 
       try {
         await socket.leave(convoId)
-        socket.emit('response', {
-          event: 'leave-conversation',
+        callback({
+          success: true,
           data: { convoId, left: true },
         })
       } catch (error) {
-        socket.emit('error', {
-          event: 'leave-conversation',
-          message: 'There was an error leaving the conversation.',
+        callback({
+          success: false,
+          error: 'There was an error leaving the conversation.',
         })
       }
     })
