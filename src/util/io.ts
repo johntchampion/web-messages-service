@@ -26,9 +26,7 @@ type AuthResult =
  * @param token JWT token to verify
  * @returns Authentication result with explicit error messages for invalid/expired tokens
  */
-const authenticateSocketEvent = async (
-  token?: string
-): Promise<AuthResult> => {
+const authenticateSocketEvent = async (token?: string): Promise<AuthResult> => {
   if (!token) return null
 
   try {
@@ -95,7 +93,7 @@ export const setupSocketIO = (server: http.Server) => {
       const { convoId, limit, before, after, order } = params
 
       if (!convoId) {
-        callback({
+        callback?.({
           success: false,
           error: 'Conversation ID is required.',
         })
@@ -163,7 +161,7 @@ export const setupSocketIO = (server: http.Server) => {
           return messageData
         })
 
-        callback({
+        callback?.({
           success: true,
           data: {
             messages: enrichedMessages,
@@ -177,7 +175,7 @@ export const setupSocketIO = (server: http.Server) => {
           error instanceof Error
             ? error.message
             : 'There was an error getting the messages.'
-        callback({
+        callback?.({
           success: false,
           error: message,
         })
@@ -193,7 +191,7 @@ export const setupSocketIO = (server: http.Server) => {
       const { convoId, content, userName, userAvatar, token } = params
 
       if (!convoId || !content) {
-        callback({
+        callback?.({
           success: false,
           error: 'Conversation ID and content are required.',
         })
@@ -205,7 +203,7 @@ export const setupSocketIO = (server: http.Server) => {
 
         // If a token was provided but is invalid, return explicit error
         if (auth !== null && !auth.success) {
-          callback({
+          callback?.({
             success: false,
             error: auth.error,
           })
@@ -225,30 +223,24 @@ export const setupSocketIO = (server: http.Server) => {
         })
         await newMessage.create()
 
-        const messageResponse = {
-          ...newMessage,
-          senderName: user ? user.displayName : newMessage.senderName,
-          senderAvatar: user
-            ? getUploadURL(user.profilePicURL)
-            : newMessage.senderAvatar,
-        }
+        // Update sender details if user is authenticated. Only for the response data, not for saving to the DB
+        newMessage.senderName = user ? user.displayName : newMessage.senderName
+        newMessage.senderAvatar = user
+          ? getUploadURL(user.profilePicURL)
+          : newMessage.senderAvatar
 
-        callback({
+        callback?.({
           success: true,
-          data: { message: messageResponse },
+          data: { message: newMessage },
         })
 
-        // Broadcast to all clients in the conversation room
-        socket.to(convoId).emit('message-created', {
-          convoId,
-          message: messageResponse,
-        })
+        broadcastMessage(convoId, newMessage)
       } catch (error) {
         const message =
           error instanceof Error
             ? error.message
             : 'There was an error sending the message.'
-        callback({
+        callback?.({
           success: false,
           error: message,
         })
@@ -269,7 +261,7 @@ export const setupSocketIO = (server: http.Server) => {
 
       // No token provided
       if (!auth) {
-        callback({
+        callback?.({
           success: false,
           error: 'Authentication required.',
         })
@@ -278,7 +270,7 @@ export const setupSocketIO = (server: http.Server) => {
 
       // Token provided but invalid/expired
       if (!auth.success) {
-        callback({
+        callback?.({
           success: false,
           error: auth.error,
         })
@@ -288,7 +280,7 @@ export const setupSocketIO = (server: http.Server) => {
       try {
         const conversations = await Conversation.findByUserId(auth.userId)
 
-        callback({
+        callback?.({
           success: true,
           data: {
             conversations: conversations.map((convo) => ({
@@ -302,7 +294,7 @@ export const setupSocketIO = (server: http.Server) => {
           error instanceof Error
             ? error.message
             : 'There was an error getting the conversations.'
-        callback({
+        callback?.({
           success: false,
           error: message,
         })
@@ -318,7 +310,7 @@ export const setupSocketIO = (server: http.Server) => {
       const { convoId } = params
 
       if (!convoId) {
-        callback({
+        callback?.({
           success: false,
           error: 'Conversation ID is required.',
         })
@@ -328,7 +320,7 @@ export const setupSocketIO = (server: http.Server) => {
       try {
         const conversation = await Conversation.findById(convoId)
 
-        callback({
+        callback?.({
           success: true,
           data: {
             conversation,
@@ -340,7 +332,7 @@ export const setupSocketIO = (server: http.Server) => {
           error instanceof Error
             ? error.message
             : 'There was an error getting the conversation.'
-        callback({
+        callback?.({
           success: false,
           error: message,
         })
@@ -356,7 +348,7 @@ export const setupSocketIO = (server: http.Server) => {
       const { name, token } = params
 
       if (!name) {
-        callback({
+        callback?.({
           success: false,
           error: 'A conversation name is required.',
         })
@@ -368,7 +360,7 @@ export const setupSocketIO = (server: http.Server) => {
 
         // If a token was provided but is invalid, return explicit error
         if (auth !== null && !auth.success) {
-          callback({
+          callback?.({
             success: false,
             error: auth.error,
           })
@@ -381,7 +373,7 @@ export const setupSocketIO = (server: http.Server) => {
         })
         await newConversation.update()
 
-        callback({
+        callback?.({
           success: true,
           data: {
             conversation: newConversation,
@@ -393,7 +385,7 @@ export const setupSocketIO = (server: http.Server) => {
           error instanceof Error
             ? error.message
             : 'There was an error creating the conversation.'
-        callback({
+        callback?.({
           success: false,
           error: message,
         })
@@ -409,7 +401,7 @@ export const setupSocketIO = (server: http.Server) => {
       const { convoId, name, token } = params
 
       if (!convoId) {
-        callback({
+        callback?.({
           success: false,
           error: 'Conversation ID is required.',
         })
@@ -417,7 +409,7 @@ export const setupSocketIO = (server: http.Server) => {
       }
 
       if (!name || name.length < 1) {
-        callback({
+        callback?.({
           success: false,
           error: 'A conversation name is required.',
         })
@@ -430,7 +422,7 @@ export const setupSocketIO = (server: http.Server) => {
 
         // If a token was provided but is invalid, return explicit error
         if (auth !== null && !auth.success) {
-          callback({
+          callback?.({
             success: false,
             error: auth.error,
           })
@@ -442,7 +434,7 @@ export const setupSocketIO = (server: http.Server) => {
           conversation.creatorId !== null &&
           conversation.creatorId !== (auth && auth.success ? auth.userId : null)
         ) {
-          callback({
+          callback?.({
             success: false,
             error: 'Only the creator can update this conversation.',
           })
@@ -452,7 +444,7 @@ export const setupSocketIO = (server: http.Server) => {
         conversation.name = name
         await conversation.update()
 
-        callback({
+        callback?.({
           success: true,
           data: {
             conversation,
@@ -470,7 +462,7 @@ export const setupSocketIO = (server: http.Server) => {
           error instanceof Error
             ? error.message
             : 'There was an error updating the conversation.'
-        callback({
+        callback?.({
           success: false,
           error: message,
         })
@@ -486,7 +478,7 @@ export const setupSocketIO = (server: http.Server) => {
       const { convoId } = params
 
       if (!convoId) {
-        callback({
+        callback?.({
           success: false,
           error: 'Conversation ID is required.',
         })
@@ -497,7 +489,7 @@ export const setupSocketIO = (server: http.Server) => {
         const conversation = await Conversation.findById(convoId)
         await conversation.delete()
 
-        callback({
+        callback?.({
           success: true,
           data: { success: true },
         })
@@ -511,7 +503,7 @@ export const setupSocketIO = (server: http.Server) => {
           error instanceof Error
             ? error.message
             : 'There was an error deleting the conversation.'
-        callback({
+        callback?.({
           success: false,
           error: message,
         })
@@ -528,7 +520,7 @@ export const setupSocketIO = (server: http.Server) => {
       const { convoId } = params
 
       if (!convoId) {
-        callback({
+        callback?.({
           success: false,
           error: 'Conversation ID is required.',
         })
@@ -537,12 +529,12 @@ export const setupSocketIO = (server: http.Server) => {
 
       try {
         await socket.join(convoId)
-        callback({
+        callback?.({
           success: true,
           data: { convoId, joined: true },
         })
       } catch (error) {
-        callback({
+        callback?.({
           success: false,
           error: 'There was an error joining the conversation.',
         })
@@ -557,7 +549,7 @@ export const setupSocketIO = (server: http.Server) => {
       const { convoId } = params
 
       if (!convoId) {
-        callback({
+        callback?.({
           success: false,
           error: 'Conversation ID is required.',
         })
@@ -566,12 +558,12 @@ export const setupSocketIO = (server: http.Server) => {
 
       try {
         await socket.leave(convoId)
-        callback({
+        callback?.({
           success: true,
           data: { convoId, left: true },
         })
       } catch (error) {
-        callback({
+        callback?.({
           success: false,
           error: 'There was an error leaving the conversation.',
         })

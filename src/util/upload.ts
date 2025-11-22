@@ -29,6 +29,13 @@ export const getUploadURL = (
   filename: string | null | undefined
 ): string | null => {
   if (filename) {
+    const lastDotIndex = filename.lastIndexOf('.')
+
+    // If no extension found, return filename unchanged
+    if (lastDotIndex === -1 || lastDotIndex === 0) {
+      return filename
+    }
+
     return (
       (process.env.BASE_URL
         ? `${process.env.BASE_URL}/uploads/`
