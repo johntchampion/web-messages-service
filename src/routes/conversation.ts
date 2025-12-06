@@ -30,6 +30,7 @@ router.put(
 
 router.delete(
   '/conversations/:convoId',
+  authentication, // Only authentication, not authorization - allows anonymous deletion of unowned conversations
   conversationController.deleteConversation
 )
 
