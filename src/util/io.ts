@@ -472,10 +472,10 @@ export const setupSocketIO = (server: http.Server) => {
     /**
      * Delete a conversation.
      * REST equivalent: DELETE /conversations/:convoId
-     * Params: { convoId }
+     * Params: { convoId, token? }
      */
     socket.on('delete-conversation', async (params = {}, callback) => {
-      const { convoId } = params
+      const { convoId, token } = params
 
       if (!convoId) {
         callback?.({
@@ -487,6 +487,29 @@ export const setupSocketIO = (server: http.Server) => {
 
       try {
         const conversation = await Conversation.findById(convoId)
+        const auth = await authenticateSocketEvent(token)
+
+        // If a token was provided but is invalid, return explicit error
+        if (auth !== null && !auth.success) {
+          callback?.({
+            success: false,
+            error: auth.error,
+          })
+          return
+        }
+
+        // If conversation has a creator, only that creator can delete it
+        if (
+          conversation.creatorId !== null &&
+          conversation.creatorId !== (auth && auth.success ? auth.userId : null)
+        ) {
+          callback?.({
+            success: false,
+            error: 'Only the creator can delete this conversation.',
+          })
+          return
+        }
+
         await conversation.delete()
 
         callback?.({

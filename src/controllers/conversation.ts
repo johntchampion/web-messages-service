@@ -109,6 +109,15 @@ export const deleteConversation = async (req: Request, res: Response) => {
 
   try {
     const conversation = await Conversation.findById(convoId)
+
+    // If conversation has a creator, only that creator can delete it
+    // If conversation has no creator (creatorId is null), anyone can delete it
+    if (conversation.creatorId !== null && conversation.creatorId !== req.userId) {
+      return res.status(403).json({
+        errorMessage: 'Only the creator can delete this conversation.',
+      })
+    }
+
     await conversation.delete()
 
     return res.sendStatus(200)
