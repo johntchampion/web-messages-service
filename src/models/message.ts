@@ -178,6 +178,13 @@ export default class Message implements MessageProps {
    * Find a message by its ID.
    */
   static async findById(id: string): Promise<Message | null> {
+    // Validate UUID format before querying database
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(id)) {
+      return null
+    }
+
     const res = await query('SELECT * FROM messages WHERE message_id = $1', [
       id,
     ])
@@ -200,6 +207,13 @@ export default class Message implements MessageProps {
       nextAfter?: { createdAt: Date; id: string }
     }
   }> {
+    // Validate UUID format before querying database
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(convoId)) {
+      return { messages: [], pageInfo: { hasMore: false } }
+    }
+
     const limit = clamp(opts.limit ?? 50, 1, 200)
     const order = opts.order ?? 'asc'
 

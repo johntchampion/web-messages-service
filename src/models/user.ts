@@ -530,6 +530,13 @@ export default class User implements Account {
   }
 
   static async findById(id: string): Promise<User | null> {
+    // Validate UUID format before querying database
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(id)) {
+      return null
+    }
+
     const r = await query('SELECT * FROM users WHERE user_id = $1', [id])
     return r.rowCount ? User.parseRow(r.rows[0]) : null
   }
