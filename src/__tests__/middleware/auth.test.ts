@@ -43,7 +43,7 @@ describe('Authentication Middleware', () => {
       const token = 'valid.jwt.token'
       ;(mockRequest.get as jest.Mock).mockReturnValue(`Bearer ${token}`)
 
-      const user = new User({ id: 'user-123', verified: true })
+      const user = new User({ id: '550e8400-e29b-41d4-a716-446655440000', verified: true })
       validateAccessTokenSpy.mockResolvedValue(user)
 
       await authentication(
@@ -53,7 +53,7 @@ describe('Authentication Middleware', () => {
       )
 
       expect(validateAccessTokenSpy).toHaveBeenCalledWith(token)
-      expect(mockRequest.userId).toBe('user-123')
+      expect(mockRequest.userId).toBe('550e8400-e29b-41d4-a716-446655440000')
       expect(mockRequest.verified).toBe(true)
       expect(nextFunction).toHaveBeenCalled()
     })
@@ -144,7 +144,7 @@ describe('Authentication Middleware', () => {
 
   describe('authorization', () => {
     it('should call next when userId is present', () => {
-      mockRequest.userId = 'user-123'
+      mockRequest.userId = '550e8400-e29b-41d4-a716-446655440000'
 
       authorization(
         mockRequest as Request,
@@ -233,7 +233,7 @@ describe('Authentication Middleware', () => {
       const token = 'valid.jwt.token'
       ;(mockRequest.get as jest.Mock).mockReturnValue(`Bearer ${token}`)
 
-      const user = new User({ id: 'user-123', verified: true })
+      const user = new User({ id: '550e8400-e29b-41d4-a716-446655440000', verified: true })
       validateAccessTokenSpy.mockResolvedValue(user)
 
       const authNext = jest.fn()
@@ -243,7 +243,7 @@ describe('Authentication Middleware', () => {
       await authentication(mockRequest as Request, mockResponse as Response, authNext)
 
       expect(authNext).toHaveBeenCalled()
-      expect(mockRequest.userId).toBe('user-123')
+      expect(mockRequest.userId).toBe('550e8400-e29b-41d4-a716-446655440000')
 
       // Then authorize
       authorization(mockRequest as Request, mockResponse as Response, authzNext)

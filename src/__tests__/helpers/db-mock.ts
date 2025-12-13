@@ -21,7 +21,7 @@ export const createMockQueryResult = <T extends QueryResultRow = any>(
  */
 export const createMockUserRow = (overrides: any = {}) => {
   return {
-    user_id: 'test-user-id-123',
+    user_id: '550e8400-e29b-41d4-a716-446655440000',
     created_at: new Date('2024-01-01'),
     updated_at: new Date('2024-01-01'),
     display_name: 'Test User',
@@ -34,6 +34,9 @@ export const createMockUserRow = (overrides: any = {}) => {
     verify_token_timestamp: null,
     reset_password_token: null,
     reset_password_token_timestamp: null,
+    token_version: 0,
+    password_changed_at: null,
+    disabled: false,
     ...overrides,
   }
 }
@@ -43,11 +46,11 @@ export const createMockUserRow = (overrides: any = {}) => {
  */
 export const createMockMessageRow = (overrides: any = {}) => {
   return {
-    message_id: 'test-message-id-123',
+    message_id: '660e8400-e29b-41d4-a716-446655440001',
     created_at: new Date('2024-01-01'),
     updated_at: new Date('2024-01-01'),
-    convo_id: 'test-convo-id-123',
-    sender_id: 'test-user-id-123',
+    convo_id: '770e8400-e29b-41d4-a716-446655440002',
+    sender_id: '550e8400-e29b-41d4-a716-446655440000',
     type: 'text',
     content: 'Test message content',
     sender_name: null,
@@ -61,7 +64,7 @@ export const createMockMessageRow = (overrides: any = {}) => {
  */
 export const createMockConversationRow = (overrides: any = {}) => {
   return {
-    convo_id: 'test-convo-id-123',
+    convo_id: '770e8400-e29b-41d4-a716-446655440002',
     created_at: new Date('2024-01-01'),
     updated_at: new Date('2024-01-01'),
     name: 'Test Conversation',

@@ -59,7 +59,7 @@ describe('User Model', () => {
         expect.stringContaining('INSERT INTO users'),
         expect.arrayContaining(['New User', 'newuser', 'newuser@example.com'])
       )
-      expect(user.id).toBe('test-user-id-123')
+      expect(user.id).toBe('550e8400-e29b-41d4-a716-446655440000')
     })
 
     it('should throw error when email is already in use', async () => {
@@ -501,10 +501,10 @@ describe('User Model', () => {
         const mockRow = createMockUserRow()
         mockQuery.mockResolvedValue(createMockQueryResult([mockRow], 1))
 
-        const user = await User.findById('test-user-id-123')
+        const user = await User.findById('550e8400-e29b-41d4-a716-446655440000')
 
         expect(user).toBeInstanceOf(User)
-        expect(user?.id).toBe('test-user-id-123')
+        expect(user?.id).toBe('550e8400-e29b-41d4-a716-446655440000')
       })
 
       it('should return null when not found', async () => {
@@ -585,7 +585,7 @@ describe('User Model', () => {
       const user = User.parseRow(mockRow)
 
       expect(user).toBeInstanceOf(User)
-      expect(user.id).toBe('test-user-id-123')
+      expect(user.id).toBe('550e8400-e29b-41d4-a716-446655440000')
       expect(user.email).toBe('test@example.com')
       expect(user.username).toBe('testuser')
       expect(user.displayName).toBe('Test User')

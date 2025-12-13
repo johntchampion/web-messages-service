@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
 import query from '../util/db'
 import sendEmail from '../util/mail'
+import isUUID from '../util/uuid'
 
 /**
  * Mirrors DB columns; everything optional so we can do partial updates safely.
@@ -530,6 +531,11 @@ export default class User implements Account {
   }
 
   static async findById(id: string): Promise<User | null> {
+    // Validate UUID format before querying database
+    if (!isUUID(id)) {
+      return null
+    }
+
     const r = await query('SELECT * FROM users WHERE user_id = $1', [id])
     return r.rowCount ? User.parseRow(r.rows[0]) : null
   }

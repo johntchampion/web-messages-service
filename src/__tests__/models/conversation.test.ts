@@ -30,18 +30,18 @@ describe('Conversation Model', () => {
       const updatedAt = new Date('2024-01-02')
 
       const conversation = new Conversation({
-        id: 'convo-123',
+        id: '770e8400-e29b-41d4-a716-446655440002',
         name: 'Test Conversation',
         createdAt,
         updatedAt,
-        creatorId: 'user-123',
+        creatorId: '550e8400-e29b-41d4-a716-446655440000',
       })
 
-      expect(conversation.id).toBe('convo-123')
+      expect(conversation.id).toBe('770e8400-e29b-41d4-a716-446655440002')
       expect(conversation.name).toBe('Test Conversation')
       expect(conversation.createdAt).toEqual(createdAt)
       expect(conversation.updatedAt).toEqual(updatedAt)
-      expect(conversation.creatorId).toBe('user-123')
+      expect(conversation.creatorId).toBe('550e8400-e29b-41d4-a716-446655440000')
     })
   })
 
@@ -62,20 +62,20 @@ describe('Conversation Model', () => {
         'INSERT INTO conversations (name, creator_id) VALUES ($1, $2) RETURNING *;',
         ['New Conversation', undefined]
       )
-      expect(conversation.id).toBe('test-convo-id-123')
+      expect(conversation.id).toBe('770e8400-e29b-41d4-a716-446655440002')
       expect(conversation.createdAt).toBeDefined()
       expect(conversation.updatedAt).toBeDefined()
     })
 
     it('should update existing conversation when id exists', async () => {
       const mockRow = createMockConversationRow({
-        convo_id: 'convo-123',
+        convo_id: '770e8400-e29b-41d4-a716-446655440002',
         name: 'Updated Conversation',
       })
       mockQuery.mockResolvedValue(createMockQueryResult([mockRow], 1))
 
       const conversation = new Conversation({
-        id: 'convo-123',
+        id: '770e8400-e29b-41d4-a716-446655440002',
         name: 'Updated Conversation',
       })
 
@@ -83,38 +83,38 @@ describe('Conversation Model', () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         'UPDATE conversations SET name = $1, creator_id = $2 WHERE convo_id = $3 RETURNING *;',
-        ['Updated Conversation', undefined, 'convo-123']
+        ['Updated Conversation', undefined, '770e8400-e29b-41d4-a716-446655440002']
       )
       expect(conversation.name).toBe('Updated Conversation')
     })
 
     it('should handle creator_id when provided', async () => {
       const mockRow = createMockConversationRow({
-        creator_id: 'user-123',
+        creator_id: '550e8400-e29b-41d4-a716-446655440000',
       })
       mockQuery.mockResolvedValue(createMockQueryResult([mockRow], 1))
 
       const conversation = new Conversation({
         name: 'Test Conversation',
-        creatorId: 'user-123',
+        creatorId: '550e8400-e29b-41d4-a716-446655440000',
       })
 
       await conversation.update()
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.any(String),
-        expect.arrayContaining(['Test Conversation', 'user-123'])
+        expect.arrayContaining(['Test Conversation', '550e8400-e29b-41d4-a716-446655440000'])
       )
-      expect(conversation.creatorId).toBe('user-123')
+      expect(conversation.creatorId).toBe('550e8400-e29b-41d4-a716-446655440000')
     })
   })
 
   describe('delete', () => {
     it('should delete conversation from database', async () => {
-      mockQuery.mockResolvedValue(createMockQueryResult([{ convo_id: 'convo-123' }], 1))
+      mockQuery.mockResolvedValue(createMockQueryResult([{ convo_id: '770e8400-e29b-41d4-a716-446655440002' }], 1))
 
       const conversation = new Conversation({
-        id: 'convo-123',
+        id: '770e8400-e29b-41d4-a716-446655440002',
         name: 'Test Conversation',
       })
 
@@ -122,7 +122,7 @@ describe('Conversation Model', () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('DELETE FROM conversations WHERE convo_id = $1'),
-        ['convo-123']
+        ['770e8400-e29b-41d4-a716-446655440002']
       )
     })
 
@@ -182,14 +182,14 @@ describe('Conversation Model', () => {
       const mockRow = createMockConversationRow()
       mockQuery.mockResolvedValue(createMockQueryResult([mockRow], 1))
 
-      const conversation = await Conversation.findById('test-convo-id-123')
+      const conversation = await Conversation.findById('770e8400-e29b-41d4-a716-446655440002')
 
       expect(conversation).toBeInstanceOf(Conversation)
-      expect(conversation.id).toBe('test-convo-id-123')
+      expect(conversation.id).toBe('770e8400-e29b-41d4-a716-446655440002')
       expect(conversation.name).toBe('Test Conversation')
       expect(mockQuery).toHaveBeenCalledWith(
         'SELECT * FROM conversations WHERE convo_id = $1;',
-        ['test-convo-id-123']
+        ['770e8400-e29b-41d4-a716-446655440002']
       )
     })
 
@@ -207,15 +207,15 @@ describe('Conversation Model', () => {
       const mockRow = createMockConversationRow({
         created_at: createdAt,
         updated_at: updatedAt,
-        creator_id: 'user-123',
+        creator_id: '550e8400-e29b-41d4-a716-446655440000',
       })
       mockQuery.mockResolvedValue(createMockQueryResult([mockRow], 1))
 
-      const conversation = await Conversation.findById('test-convo-id-123')
+      const conversation = await Conversation.findById('770e8400-e29b-41d4-a716-446655440002')
 
       expect(conversation.createdAt).toEqual(createdAt)
       expect(conversation.updatedAt).toEqual(updatedAt)
-      expect(conversation.creatorId).toBe('user-123')
+      expect(conversation.creatorId).toBe('550e8400-e29b-41d4-a716-446655440000')
     })
   })
 
@@ -223,19 +223,19 @@ describe('Conversation Model', () => {
     it('should return conversations created by user', async () => {
       const mockRows = [
         createMockConversationRow({
-          convo_id: 'convo-1',
+          convo_id: '770e8400-e29b-41d4-a716-446655440003',
           name: 'First Conversation',
-          creator_id: 'user-123',
+          creator_id: '550e8400-e29b-41d4-a716-446655440000',
         }),
         createMockConversationRow({
-          convo_id: 'convo-2',
+          convo_id: '770e8400-e29b-41d4-a716-446655440004',
           name: 'Second Conversation',
-          creator_id: 'user-123',
+          creator_id: '550e8400-e29b-41d4-a716-446655440000',
         }),
       ]
       mockQuery.mockResolvedValue(createMockQueryResult(mockRows, 2))
 
-      const conversations = await Conversation.findByUserId('user-123')
+      const conversations = await Conversation.findByUserId('550e8400-e29b-41d4-a716-446655440000')
 
       expect(conversations).toHaveLength(2)
       expect(conversations[0]).toBeInstanceOf(Conversation)
@@ -243,14 +243,14 @@ describe('Conversation Model', () => {
       expect(conversations[1].name).toBe('Second Conversation')
       expect(mockQuery).toHaveBeenCalledWith(
         'SELECT * FROM conversations WHERE creator_id = $1 ORDER BY updated_at DESC;',
-        ['user-123']
+        ['550e8400-e29b-41d4-a716-446655440000']
       )
     })
 
     it('should return empty array when user has no conversations', async () => {
       mockQuery.mockResolvedValue(createMockQueryResult([], 0))
 
-      const conversations = await Conversation.findByUserId('user-123')
+      const conversations = await Conversation.findByUserId('550e8400-e29b-41d4-a716-446655440000')
 
       expect(conversations).toHaveLength(0)
     })
@@ -261,20 +261,20 @@ describe('Conversation Model', () => {
 
       const mockRows = [
         createMockConversationRow({
-          convo_id: 'convo-new',
+          convo_id: '770e8400-e29b-41d4-a716-446655440005',
           updated_at: newDate,
         }),
         createMockConversationRow({
-          convo_id: 'convo-old',
+          convo_id: '770e8400-e29b-41d4-a716-446655440006',
           updated_at: oldDate,
         }),
       ]
       mockQuery.mockResolvedValue(createMockQueryResult(mockRows, 2))
 
-      const conversations = await Conversation.findByUserId('user-123')
+      const conversations = await Conversation.findByUserId('550e8400-e29b-41d4-a716-446655440000')
 
-      expect(conversations[0].id).toBe('convo-new')
-      expect(conversations[1].id).toBe('convo-old')
+      expect(conversations[0].id).toBe('770e8400-e29b-41d4-a716-446655440005')
+      expect(conversations[1].id).toBe('770e8400-e29b-41d4-a716-446655440006')
     })
   })
 
@@ -282,10 +282,10 @@ describe('Conversation Model', () => {
     it('should return conversations older than specified days', async () => {
       const mockRows = [
         createMockConversationRow({
-          convo_id: 'old-convo-1',
+          convo_id: '770e8400-e29b-41d4-a716-446655440007',
         }),
         createMockConversationRow({
-          convo_id: 'old-convo-2',
+          convo_id: '770e8400-e29b-41d4-a716-446655440008',
         }),
       ]
       mockQuery.mockResolvedValue(createMockQueryResult(mockRows, 2))

@@ -14,12 +14,12 @@ describe('Message Model', () => {
   describe('constructor', () => {
     it('should create a message instance with required properties', () => {
       const message = new Message({
-        convoId: 'convo-123',
+        convoId: '770e8400-e29b-41d4-a716-446655440002',
         type: 'text',
         content: 'Hello world',
       })
 
-      expect(message.convoId).toBe('convo-123')
+      expect(message.convoId).toBe('770e8400-e29b-41d4-a716-446655440002')
       expect(message.type).toBe('text')
       expect(message.content).toBe('Hello world')
       expect(message.senderId).toBeNull()
@@ -28,15 +28,15 @@ describe('Message Model', () => {
 
     it('should handle optional properties', () => {
       const message = new Message({
-        convoId: 'convo-123',
+        convoId: '770e8400-e29b-41d4-a716-446655440002',
         type: 'text',
         content: 'Hello',
-        senderId: 'user-123',
+        senderId: '550e8400-e29b-41d4-a716-446655440000',
         senderName: 'John',
         senderAvatar: 'http://example.com/avatar.jpg',
       })
 
-      expect(message.senderId).toBe('user-123')
+      expect(message.senderId).toBe('550e8400-e29b-41d4-a716-446655440000')
       expect(message.senderName).toBe('John')
       expect(message.senderAvatar).toBe('http://example.com/avatar.jpg')
     })
@@ -48,7 +48,7 @@ describe('Message Model', () => {
       mockQuery.mockResolvedValue(createMockQueryResult([mockRow], 1))
 
       const message = new Message({
-        convoId: 'convo-123',
+        convoId: '770e8400-e29b-41d4-a716-446655440002',
         type: 'text',
         content: 'Test message',
       })
@@ -58,7 +58,7 @@ describe('Message Model', () => {
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO messages'),
         expect.arrayContaining([
-          'convo-123',
+          '770e8400-e29b-41d4-a716-446655440002',
           null,
           'text',
           'Test message',
@@ -66,35 +66,35 @@ describe('Message Model', () => {
           null,
         ])
       )
-      expect(message.id).toBe('test-message-id-123')
+      expect(message.id).toBe('660e8400-e29b-41d4-a716-446655440001')
       expect(message.createdAt).toBeDefined()
     })
 
     it('should create message with sender information', async () => {
       const mockRow = createMockMessageRow({
-        sender_id: 'user-123',
+        sender_id: '550e8400-e29b-41d4-a716-446655440000',
       })
       mockQuery.mockResolvedValue(createMockQueryResult([mockRow], 1))
 
       const message = new Message({
-        convoId: 'convo-123',
+        convoId: '770e8400-e29b-41d4-a716-446655440002',
         type: 'text',
         content: 'Test message',
-        senderId: 'user-123',
+        senderId: '550e8400-e29b-41d4-a716-446655440000',
       })
 
       await message.create()
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO messages'),
-        expect.arrayContaining(['user-123'])
+        expect.arrayContaining(['550e8400-e29b-41d4-a716-446655440000'])
       )
     })
 
     it('should throw error when content exceeds 4096 bytes', async () => {
       const longContent = 'a'.repeat(4097)
       const message = new Message({
-        convoId: 'convo-123',
+        convoId: '770e8400-e29b-41d4-a716-446655440002',
         type: 'text',
         content: longContent,
       })
@@ -111,7 +111,7 @@ describe('Message Model', () => {
       mockQuery.mockResolvedValue(createMockQueryResult([mockRow], 1))
 
       const message = new Message({
-        convoId: 'convo-123',
+        convoId: '770e8400-e29b-41d4-a716-446655440002',
         type: 'text',
         content: maxContent,
       })
@@ -125,7 +125,7 @@ describe('Message Model', () => {
       mockQuery.mockRejectedValue(new Error('Database error'))
 
       const message = new Message({
-        convoId: 'convo-123',
+        convoId: '770e8400-e29b-41d4-a716-446655440002',
         type: 'text',
         content: 'Test',
       })
@@ -139,7 +139,7 @@ describe('Message Model', () => {
       mockQuery.mockResolvedValue(createMockQueryResult([], 0))
 
       const message = new Message({
-        convoId: 'convo-123',
+        convoId: '770e8400-e29b-41d4-a716-446655440002',
         type: 'text',
         content: 'Test',
       })
@@ -156,7 +156,7 @@ describe('Message Model', () => {
 
       const message = new Message({
         id: 'message-123',
-        convoId: 'convo-123',
+        convoId: '770e8400-e29b-41d4-a716-446655440002',
         type: 'text',
         content: 'Test',
       })
@@ -175,7 +175,7 @@ describe('Message Model', () => {
 
       const message = new Message({
         id: 'message-123',
-        convoId: 'convo-123',
+        convoId: '770e8400-e29b-41d4-a716-446655440002',
         type: 'text',
         content: 'Test',
       })
@@ -187,7 +187,7 @@ describe('Message Model', () => {
 
     it('should return false when message has no id', async () => {
       const message = new Message({
-        convoId: 'convo-123',
+        convoId: '770e8400-e29b-41d4-a716-446655440002',
         type: 'text',
         content: 'Test',
       })
@@ -208,7 +208,7 @@ describe('Message Model', () => {
 
       const message = new Message({
         id: 'message-123',
-        convoId: 'convo-123',
+        convoId: '770e8400-e29b-41d4-a716-446655440002',
         type: 'text',
         content: 'Original',
       })
@@ -226,7 +226,7 @@ describe('Message Model', () => {
       const longContent = 'a'.repeat(4097)
       const message = new Message({
         id: 'message-123',
-        convoId: 'convo-123',
+        convoId: '770e8400-e29b-41d4-a716-446655440002',
         type: 'text',
         content: 'Original',
       })
@@ -239,7 +239,7 @@ describe('Message Model', () => {
 
     it('should throw error when message has no id', async () => {
       const message = new Message({
-        convoId: 'convo-123',
+        convoId: '770e8400-e29b-41d4-a716-446655440002',
         type: 'text',
         content: 'Test',
       })
@@ -255,7 +255,7 @@ describe('Message Model', () => {
 
       const message = new Message({
         id: 'message-123',
-        convoId: 'convo-123',
+        convoId: '770e8400-e29b-41d4-a716-446655440002',
         type: 'text',
         content: 'Test',
       })
@@ -278,7 +278,7 @@ describe('Message Model', () => {
 
       const message = new Message({
         id: 'message-123',
-        convoId: 'convo-123',
+        convoId: '770e8400-e29b-41d4-a716-446655440002',
         type: 'text',
         content: 'Original',
       })
@@ -294,7 +294,7 @@ describe('Message Model', () => {
 
     it('should throw error when message has no id', async () => {
       const message = new Message({
-        convoId: 'convo-123',
+        convoId: '770e8400-e29b-41d4-a716-446655440002',
         type: 'text',
         content: 'Test',
       })
@@ -309,7 +309,7 @@ describe('Message Model', () => {
 
       const message = new Message({
         id: 'nonexistent-id',
-        convoId: 'convo-123',
+        convoId: '770e8400-e29b-41d4-a716-446655440002',
         type: 'text',
         content: 'Test',
       })
@@ -326,7 +326,7 @@ describe('Message Model', () => {
 
       const message = new Message({
         id: 'message-123',
-        convoId: 'convo-123',
+        convoId: '770e8400-e29b-41d4-a716-446655440002',
         type: 'text',
         content: 'Test',
       })
@@ -341,7 +341,7 @@ describe('Message Model', () => {
 
     it('should throw error when message has no id', async () => {
       const message = new Message({
-        convoId: 'convo-123',
+        convoId: '770e8400-e29b-41d4-a716-446655440002',
         type: 'text',
         content: 'Test',
       })
@@ -357,10 +357,10 @@ describe('Message Model', () => {
       const mockRow = createMockMessageRow()
       mockQuery.mockResolvedValue(createMockQueryResult([mockRow], 1))
 
-      const message = await Message.findById('test-message-id-123')
+      const message = await Message.findById('660e8400-e29b-41d4-a716-446655440001')
 
       expect(message).toBeInstanceOf(Message)
-      expect(message?.id).toBe('test-message-id-123')
+      expect(message?.id).toBe('660e8400-e29b-41d4-a716-446655440001')
       expect(message?.content).toBe('Test message content')
     })
 
@@ -376,12 +376,12 @@ describe('Message Model', () => {
   describe('listByConversation', () => {
     it('should return messages in ascending order', async () => {
       const mockRows = [
-        createMockMessageRow({ message_id: 'msg-1', content: 'First' }),
-        createMockMessageRow({ message_id: 'msg-2', content: 'Second' }),
+        createMockMessageRow({ message_id: '660e8400-e29b-41d4-a716-446655440011', content: 'First' }),
+        createMockMessageRow({ message_id: '660e8400-e29b-41d4-a716-446655440012', content: 'Second' }),
       ]
       mockQuery.mockResolvedValue(createMockQueryResult(mockRows, 2))
 
-      const result = await Message.listByConversation('convo-123', {
+      const result = await Message.listByConversation('770e8400-e29b-41d4-a716-446655440002', {
         order: 'asc',
       })
 
@@ -393,12 +393,12 @@ describe('Message Model', () => {
 
     it('should return messages in descending order', async () => {
       const mockRows = [
-        createMockMessageRow({ message_id: 'msg-2', content: 'Second' }),
-        createMockMessageRow({ message_id: 'msg-1', content: 'First' }),
+        createMockMessageRow({ message_id: '660e8400-e29b-41d4-a716-446655440012', content: 'Second' }),
+        createMockMessageRow({ message_id: '660e8400-e29b-41d4-a716-446655440011', content: 'First' }),
       ]
       mockQuery.mockResolvedValue(createMockQueryResult(mockRows, 2))
 
-      const result = await Message.listByConversation('convo-123', {
+      const result = await Message.listByConversation('770e8400-e29b-41d4-a716-446655440002', {
         order: 'desc',
       })
 
@@ -417,7 +417,7 @@ describe('Message Model', () => {
         )
       mockQuery.mockResolvedValue(createMockQueryResult(mockRows, 11))
 
-      const result = await Message.listByConversation('convo-123', {
+      const result = await Message.listByConversation('770e8400-e29b-41d4-a716-446655440002', {
         limit: 10,
       })
 
@@ -428,7 +428,7 @@ describe('Message Model', () => {
     it('should use default limit of 50', async () => {
       mockQuery.mockResolvedValue(createMockQueryResult([], 0))
 
-      await Message.listByConversation('convo-123')
+      await Message.listByConversation('770e8400-e29b-41d4-a716-446655440002')
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.any(String),
@@ -439,7 +439,7 @@ describe('Message Model', () => {
     it('should cap limit at 200', async () => {
       mockQuery.mockResolvedValue(createMockQueryResult([], 0))
 
-      await Message.listByConversation('convo-123', { limit: 500 })
+      await Message.listByConversation('770e8400-e29b-41d4-a716-446655440002', { limit: 500 })
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.any(String),
@@ -451,13 +451,13 @@ describe('Message Model', () => {
       const beforeDate = new Date('2024-01-01T12:00:00Z')
       mockQuery.mockResolvedValue(createMockQueryResult([], 0))
 
-      await Message.listByConversation('convo-123', {
-        before: { createdAt: beforeDate, id: 'msg-123' },
+      await Message.listByConversation('770e8400-e29b-41d4-a716-446655440002', {
+        before: { createdAt: beforeDate, id: '660e8400-e29b-41d4-a716-446655440001' },
       })
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('(m.created_at, m.message_id) <'),
-        expect.arrayContaining(['convo-123', beforeDate, 'msg-123'])
+        expect.arrayContaining(['770e8400-e29b-41d4-a716-446655440002', beforeDate, '660e8400-e29b-41d4-a716-446655440001'])
       )
     })
 
@@ -465,13 +465,13 @@ describe('Message Model', () => {
       const afterDate = new Date('2024-01-01T12:00:00Z')
       mockQuery.mockResolvedValue(createMockQueryResult([], 0))
 
-      await Message.listByConversation('convo-123', {
-        after: { createdAt: afterDate, id: 'msg-123' },
+      await Message.listByConversation('770e8400-e29b-41d4-a716-446655440002', {
+        after: { createdAt: afterDate, id: '660e8400-e29b-41d4-a716-446655440001' },
       })
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('(m.created_at, m.message_id) >'),
-        expect.arrayContaining(['convo-123', afterDate, 'msg-123'])
+        expect.arrayContaining(['770e8400-e29b-41d4-a716-446655440002', afterDate, '660e8400-e29b-41d4-a716-446655440001'])
       )
     })
 
@@ -480,32 +480,32 @@ describe('Message Model', () => {
       const date2 = new Date('2024-01-01T11:00:00Z')
       const mockRows = [
         createMockMessageRow({
-          message_id: 'msg-1',
+          message_id: '660e8400-e29b-41d4-a716-446655440011',
           created_at: date1,
         }),
         createMockMessageRow({
-          message_id: 'msg-2',
+          message_id: '660e8400-e29b-41d4-a716-446655440012',
           created_at: date2,
         }),
       ]
       mockQuery.mockResolvedValue(createMockQueryResult(mockRows, 2))
 
-      const result = await Message.listByConversation('convo-123')
+      const result = await Message.listByConversation('770e8400-e29b-41d4-a716-446655440002')
 
       expect(result.pageInfo.nextBefore).toEqual({
         createdAt: date1,
-        id: 'msg-1',
+        id: '660e8400-e29b-41d4-a716-446655440011',
       })
       expect(result.pageInfo.nextAfter).toEqual({
         createdAt: date2,
-        id: 'msg-2',
+        id: '660e8400-e29b-41d4-a716-446655440012',
       })
     })
 
     it('should return undefined cursors when no messages', async () => {
       mockQuery.mockResolvedValue(createMockQueryResult([], 0))
 
-      const result = await Message.listByConversation('convo-123')
+      const result = await Message.listByConversation('770e8400-e29b-41d4-a716-446655440002')
 
       expect(result.messages).toHaveLength(0)
       expect(result.pageInfo.nextBefore).toBeUndefined()
@@ -519,11 +519,11 @@ describe('Message Model', () => {
       const message = Message.parseRow(mockRow)
 
       expect(message).toBeInstanceOf(Message)
-      expect(message.id).toBe('test-message-id-123')
-      expect(message.convoId).toBe('test-convo-id-123')
+      expect(message.id).toBe('660e8400-e29b-41d4-a716-446655440001')
+      expect(message.convoId).toBe('770e8400-e29b-41d4-a716-446655440002')
       expect(message.type).toBe('text')
       expect(message.content).toBe('Test message content')
-      expect(message.senderId).toBe('test-user-id-123')
+      expect(message.senderId).toBe('550e8400-e29b-41d4-a716-446655440000')
     })
 
     it('should handle null values', () => {

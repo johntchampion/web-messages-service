@@ -1,4 +1,5 @@
 import query from '../util/db'
+import isUUID from '../util/uuid'
 
 export type ContentType = 'text' | 'image'
 
@@ -178,6 +179,11 @@ export default class Message implements MessageProps {
    * Find a message by its ID.
    */
   static async findById(id: string): Promise<Message | null> {
+    // Validate UUID format before querying database
+    if (!isUUID(id)) {
+      return null
+    }
+
     const res = await query('SELECT * FROM messages WHERE message_id = $1', [
       id,
     ])
@@ -200,6 +206,11 @@ export default class Message implements MessageProps {
       nextAfter?: { createdAt: Date; id: string }
     }
   }> {
+    // Validate UUID format before querying database
+    if (!isUUID(convoId)) {
+      return { messages: [], pageInfo: { hasMore: false } }
+    }
+
     const limit = clamp(opts.limit ?? 50, 1, 200)
     const order = opts.order ?? 'asc'
 
