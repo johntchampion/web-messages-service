@@ -631,3 +631,20 @@ export const broadcastConversationDeletion = (convoId: string) => {
     convoId,
   })
 }
+
+/**
+ * Broadcasts a user profile update to all conversation rooms the user participates in.
+ * @param convoIds The conversation rooms to broadcast to.
+ * @param payload Minimal user payload for clients to update cached data.
+ */
+export const broadcastUserProfileUpdate = (
+  convoIds: string[],
+  payload: { userId: string; displayName?: string; profilePicURL?: string | null }
+) => {
+  convoIds.forEach((convoId) => {
+    io?.to(convoId).emit('user-updated', {
+      ...payload,
+      convoId,
+    })
+  })
+}

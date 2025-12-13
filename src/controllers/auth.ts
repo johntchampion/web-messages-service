@@ -3,7 +3,9 @@ import { validationResult } from 'express-validator'
 
 import RequestError from '../util/error'
 import User from '../models/user'
+import Conversation from '../models/conversation'
 import { getUploadURL } from '../util/upload'
+import { broadcastUserProfileUpdate } from '../util/io'
 
 export const ping = async (req: Request, res: Response, next: NextFunction) => {
   if (req.userId) {
@@ -424,6 +426,17 @@ export const updateProfile = async (
     }
 
     await user.update(updateData)
+
+    try {
+      const convoIds = await Conversation.findIdsByParticipant(user.id!)
+      broadcastUserProfileUpdate(convoIds, {
+        userId: user.id!,
+        displayName: user.displayName,
+        profilePicURL: getUploadURL(user.profilePicURL),
+      })
+    } catch (error) {
+      console.error('Failed to broadcast profile update', error)
+    }
 
     return res.status(200).json({
       user: {
