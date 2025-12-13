@@ -132,6 +132,32 @@ class Conversation {
   }
 
   /**
+   * Returns distinct conversation IDs a user participates in (as creator or sender).
+   * This is a proxy for membership given the current schema.
+   */
+  static findIdsByParticipant = async (userId: string): Promise<string[]> => {
+    // Validate UUID format before querying database
+    if (!isUUID(userId)) {
+      return []
+    }
+
+    const res = await query(
+      `
+        SELECT DISTINCT convo_id
+        FROM messages
+        WHERE sender_id = $1
+        UNION
+        SELECT convo_id
+        FROM conversations
+        WHERE creator_id = $1;
+      `,
+      [userId]
+    )
+
+    return res.rows.map((row) => row['convo_id'] as string)
+  }
+
+  /**
    * Returns an array of Conversations that are active.
    * @param daysOld The number of days a conversation has been inactive with no new messages.
    * @param shouldDelete Optional boolean for whether or not the returned records should be deleted.
