@@ -1,4 +1,5 @@
 import query from '../util/db'
+import isUUID from '../util/uuid'
 
 export type ContentType = 'text' | 'image'
 
@@ -179,9 +180,7 @@ export default class Message implements MessageProps {
    */
   static async findById(id: string): Promise<Message | null> {
     // Validate UUID format before querying database
-    const uuidRegex =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-    if (!uuidRegex.test(id)) {
+    if (!isUUID(id)) {
       return null
     }
 
@@ -208,9 +207,7 @@ export default class Message implements MessageProps {
     }
   }> {
     // Validate UUID format before querying database
-    const uuidRegex =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-    if (!uuidRegex.test(convoId)) {
+    if (!isUUID(convoId)) {
       return { messages: [], pageInfo: { hasMore: false } }
     }
 

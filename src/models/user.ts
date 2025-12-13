@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
 import query from '../util/db'
 import sendEmail from '../util/mail'
+import isUUID from '../util/uuid'
 
 /**
  * Mirrors DB columns; everything optional so we can do partial updates safely.
@@ -531,9 +532,7 @@ export default class User implements Account {
 
   static async findById(id: string): Promise<User | null> {
     // Validate UUID format before querying database
-    const uuidRegex =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-    if (!uuidRegex.test(id)) {
+    if (!isUUID(id)) {
       return null
     }
 

@@ -1,4 +1,5 @@
 import query from '../util/db'
+import isUUID from '../util/uuid'
 
 const DAY_MILLISECONDS = 24 * 60 * 60 * 1000
 const EXPIRY_DAYS = 30
@@ -83,9 +84,7 @@ class Conversation {
    */
   static findById = async (id: string): Promise<Conversation> => {
     // Validate UUID format before querying database
-    const uuidRegex =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-    if (!uuidRegex.test(id)) {
+    if (!isUUID(id)) {
       throw new Error('There is no conversation with that ID.')
     }
 
