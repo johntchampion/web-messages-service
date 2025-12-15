@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Messenger Hawk is a backend messaging service built with Express.js and TypeScript. It provides REST API endpoints and real-time messaging via Socket.IO. The service supports user authentication, conversations, and messages with a PostgreSQL database backend.
+This is a backend messaging service built with Express.js and TypeScript. It provides REST API endpoints and real-time messaging via Socket.IO. The service supports user authentication, conversations, and messages with a PostgreSQL database backend.
 
 This service is designed to work with a separate frontend application (https://github.com/appdevjohn/web-messages) and requires a PostgreSQL database (https://github.com/appdevjohn/web-messages-db).
 

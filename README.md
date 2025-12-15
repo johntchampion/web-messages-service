@@ -1,4 +1,4 @@
-# Messenger Hawk - Service
+# Web Messages - Service
 
 This is a basic backend service to support a messaging web app. It has REST API endpoints for certain functions and offers real-time message support with Socket.IO.
 
@@ -17,6 +17,7 @@ This backend service was made to support the web app that was made alongside it.
 | TOKEN_SECRET     | JWT signing secret.                                   | secretsecret          |
 | APP_BASE_URL     | Frontend application URL for password reset links.    | https://your.site     |
 | BASE_URL         | Backend application URL for the image base URL links. | https://api.your.site |
+| APP_NAME         | The name of the app, for use in sending emails.       | OneTimeChat           |
 | VERIFY_USERS     | Set to 'true' to enable email verification.           | true                  |
 | SEND_EMAILS      | Set to 'true' to enable any email sending.            | true                  |
 | ENABLE_UPLOADS   | Set to 'true' to enable image uploads.                | true                  |

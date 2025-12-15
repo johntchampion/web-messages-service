@@ -28,7 +28,7 @@ const sendEmail = (
       ],
       from: {
         email: `noreply@${process.env.APP_BASE_URL?.replace('https://', '')}`,
-        name: 'Messenger Hawk',
+        name: process.env.APP_NAME || 'Web Messages',
       },
     },
     {
