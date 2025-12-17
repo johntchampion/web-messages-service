@@ -1,0 +1,19 @@
+# Development Dockerfile
+FROM node:24-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json package-lock.json ./
+
+# Install all dependencies (including devDependencies)
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Expose the application port
+EXPOSE ${PORT:-8000}
+
+# Run development server with hot-reload
+CMD ["npm", "run", "dev"]

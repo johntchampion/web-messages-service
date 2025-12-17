@@ -13,7 +13,6 @@ This backend service was made to support the web app that was made alongside it.
 | PGDATABASE       | The database name.                                    | messages_db           |
 | PGPASSWORD       | The password for the user of the database.            | password1             |
 | PGPORT           | The port for the database.                            | 5432                  |
-| PORT             | The port which the application runs.                  | 8000                  |
 | TOKEN_SECRET     | JWT signing secret.                                   | secretsecret          |
 | APP_BASE_URL     | Frontend application URL for password reset links.    | https://your.site     |
 | BASE_URL         | Backend application URL for the image base URL links. | https://api.your.site |
@@ -22,6 +21,7 @@ This backend service was made to support the web app that was made alongside it.
 | SEND_EMAILS      | Set to 'true' to enable any email sending.            | true                  |
 | ENABLE_UPLOADS   | Set to 'true' to enable image uploads.                | true                  |
 | SENDGRID_API_KEY | API key to authenticate with SendGrid                 | apikey                |
+| PORT             | The port which the application runs.                  | 8000                  |
 | NODE_ENV         | Set to 'test' to enable additional logging.           | test                  |
 
 ## Running on your Local Machine
