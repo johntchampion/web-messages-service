@@ -72,7 +72,6 @@ Create a `.env` file in the root directory with these variables:
 | Variable         | Description                                     | Default     |
 | ---------------- | ----------------------------------------------- | ----------- |
 | PORT             | Server port                                     | 8000        |
-| SOCKET_PATH      | Path for Socket.IO connection                   | /socket.io  |
 | APP_NAME         | Application name (used in emails)               | OneTimeChat |
 | VERIFY_USERS     | Enable email verification ('true' or 'false')   | false       |
 | SEND_EMAILS      | Enable email sending ('true' or 'false')        | false       |
@@ -291,7 +290,6 @@ docker run -p 8000:8000 --env-file .env messages-service
 ## Socket.IO Events
 
 All Socket.IO events use callbacks for responses. Responses follow the format:
-
 - Success: `{ success: true, data: {...} }`
 - Error: `{ success: false, error: "error message" }`
 
@@ -300,7 +298,6 @@ All Socket.IO events use callbacks for responses. Responses follow the format:
 **Message Events:**
 
 - `list-messages` - List messages in a conversation with cursor-based pagination
-
   - Params: `{ convoId, limit?, before?, after?, order? }`
   - Returns: `{ messages: [], pageInfo: {...}, conversation: {...}, deletionDate: Date }`
   - Note: Messages include enriched sender details (displayName, profilePicURL) for authenticated users
@@ -314,24 +311,20 @@ All Socket.IO events use callbacks for responses. Responses follow the format:
 **Conversation Events:**
 
 - `list-conversations` - List all conversations for authenticated user
-
   - Params: `{ token }` (required)
   - Returns: `{ conversations: [...] }`
   - Auth: Required
 
 - `get-conversation` - Get a single conversation by ID
-
   - Params: `{ convoId }`
   - Returns: `{ conversation: {...}, deletionDate: Date }`
 
 - `create-conversation` - Create a new conversation
-
   - Params: `{ name, token? }`
   - Returns: `{ conversation: {...}, deletionDate: Date }`
   - Note: Providing `token` sets the creator, allowing future updates/deletes
 
 - `update-conversation` - Update a conversation's name
-
   - Params: `{ convoId, name, token? }`
   - Returns: `{ conversation: {...}, deletionDate: Date }`
   - Auth: Required if conversation has a creator (only creator can update)
@@ -346,7 +339,6 @@ All Socket.IO events use callbacks for responses. Responses follow the format:
 **Room Management Events:**
 
 - `join-conversation` - Join a conversation room to receive real-time updates
-
   - Params: `{ convoId }`
   - Returns: `{ convoId, joined: true }`
 
@@ -359,17 +351,14 @@ All Socket.IO events use callbacks for responses. Responses follow the format:
 These events are broadcast to all clients in a conversation room:
 
 - `message-created` - New message was created
-
   - Data: `{ convoId, message: {...} }`
   - Triggered by: `create-message` event
 
 - `conversation-updated` - Conversation was updated
-
   - Data: `{ conversation: {...}, deletionDate: Date }`
   - Triggered by: `update-conversation` event
 
 - `conversation-deleted` - Conversation was deleted
-
   - Data: `{ convoId }`
   - Triggered by: `delete-conversation` event
 
