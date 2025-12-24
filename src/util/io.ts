@@ -73,6 +73,7 @@ const authenticateSocketEvent = async (token?: string): Promise<AuthResult> => {
  */
 export const setupSocketIO = (server: http.Server) => {
   io = new Server(server, {
+    path: process.env.SOCKET_PATH || '/socket.io',
     cors: {
       origin: '*',
       methods: 'GET',
