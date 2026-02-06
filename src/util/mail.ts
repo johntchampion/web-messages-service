@@ -4,39 +4,40 @@ const sendEmail = (
   toEmail: string,
   toName: string,
   subject: string,
-  content: string
+  content: string,
 ): Promise<AxiosResponse<any>> => {
+  const apiKey = process.env.MAILJET_API_KEY
+  const apiSecret = process.env.MAILJET_API_SECRET
+
   return axios.post(
-    'https://api.sendgrid.com/v3/mail/send',
+    'https://api.mailjet.com/v3.1/send',
     {
-      personalizations: [
+      Messages: [
         {
-          to: [
+          From: {
+            Email: `noreply@${process.env.APP_BASE_URL?.replace('https://', '').replace('http://', '')}`,
+            Name: process.env.APP_NAME || 'Web Messages',
+          },
+          To: [
             {
-              email: toEmail,
-              name: toName,
+              Email: toEmail,
+              Name: toName,
             },
           ],
+          Subject: subject,
+          HTMLPart: content,
         },
       ],
-      subject: subject,
-      content: [
-        {
-          type: 'text/html',
-          value: content,
-        },
-      ],
-      from: {
-        email: `noreply@${process.env.APP_BASE_URL?.replace('https://', '')}`,
-        name: process.env.APP_NAME || 'Web Messages',
-      },
     },
     {
+      auth: {
+        username: apiKey || '',
+        password: apiSecret || '',
+      },
       headers: {
-        Authorization: 'Bearer ' + process.env.SENDGRID_API_KEY,
         'Content-Type': 'application/json',
       },
-    }
+    },
   )
 }
 

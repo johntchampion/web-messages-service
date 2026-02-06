@@ -62,7 +62,8 @@ Required environment variables (create a `.env` file in the root):
 - `VERIFY_USERS` - Set to 'true' to enable email verification
 - `SEND_EMAILS` - Set to 'true' to enable any email sending
 - `ENABLE_UPLOADS` - Set to 'true' to enable image uploads
-- `SENDGRID_API_KEY` - API key to authenticate with SendGrid
+- `MAILJET_API_KEY` - API key to authenticate with Mailjet
+- `MAILJET_API_SECRET` - API secret to authenticate with Mailjet
 - `NODE_ENV` - Set to 'test' to enable additional logging
 
 ## Architecture
