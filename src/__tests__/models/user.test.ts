@@ -649,7 +649,7 @@ describe('User Model', () => {
         'resetuser',
         'Reset Password',
         expect.stringContaining(
-          'https://example.com/auth/reset-password/reset-token-123'
+          'https://example.com/reset-password/reset-token-123'
         )
       )
     })
@@ -670,7 +670,7 @@ describe('User Model', () => {
         'resetuser',
         'Reset Password',
         expect.stringContaining(
-          'http://localhost:3000/auth/reset-password/reset-token-123'
+          'http://localhost:3000/reset-password/reset-token-123'
         )
       )
     })
