@@ -217,14 +217,14 @@ export default class User implements Account {
       process.env.TOKEN_SECRET as string,
       {
         expiresIn: '1h',
-      }
+      },
     )
     const refreshToken = jwt.sign(
       refreshTokenPayload,
       process.env.TOKEN_SECRET as string,
       {
         expiresIn: '7d',
-      }
+      },
     )
 
     // Store refresh token in sessions table
@@ -232,7 +232,7 @@ export default class User implements Account {
       this.id!,
       refreshToken,
       options?.userAgent,
-      options?.ip
+      options?.ip,
     )
 
     return {
@@ -249,7 +249,7 @@ export default class User implements Account {
     userId: string,
     refreshToken: string,
     userAgent?: string,
-    ip?: string
+    ip?: string,
   ): Promise<string> {
     const rtHash = crypto
       .createHash('sha256')
@@ -281,7 +281,7 @@ export default class User implements Account {
       // Verify JWT signature and expiry
       const decoded = jwt.verify(
         accessToken,
-        process.env.TOKEN_SECRET as string
+        process.env.TOKEN_SECRET as string,
       ) as AccessToken
 
       if (!decoded.userId) return null
@@ -305,13 +305,13 @@ export default class User implements Account {
    * Checks: token signature, expiry, session exists, not revoked, tokenVersion matches.
    */
   static async validateRefreshToken(
-    refreshToken: string
+    refreshToken: string,
   ): Promise<User | null> {
     try {
       // Verify JWT signature and expiry
       const decoded = jwt.verify(
         refreshToken,
-        process.env.TOKEN_SECRET as string
+        process.env.TOKEN_SECRET as string,
       ) as RefreshToken
 
       if (!decoded.userId) return null
@@ -328,7 +328,7 @@ export default class User implements Account {
          WHERE rt_hash = $1
            AND revoked_at IS NULL
            AND expires_at > NOW()`,
-        [rtHash]
+        [rtHash],
       )
 
       if (!sessionResult.rowCount) return null
@@ -419,7 +419,7 @@ export default class User implements Account {
         this.verifyTokenTimestamp.getTime() < Date.now() - expiryMs
       if (expired)
         throw new Error(
-          'The verification token is expired. You need to request a new one.'
+          'The verification token is expired. You need to request a new one.',
         )
     }
 
@@ -446,7 +446,7 @@ export default class User implements Account {
    */
   async completePasswordReset(
     token: string,
-    newPassword: string
+    newPassword: string,
   ): Promise<User> {
     if (!this.id) throw new Error('User is not yet saved to the database.')
     await this.reload()
@@ -490,31 +490,31 @@ export default class User implements Account {
   sendVerificationEmail() {
     if (!this.email || !this.username || !this.verifyToken) {
       return Promise.reject(
-        new Error('Missing email, username, or verification token.')
+        new Error('Missing email, username, or verification token.'),
       )
     }
     return sendEmail(
       this.email,
       `${this.username}`,
       'Your Verification Code',
-      `Your verification code is ${this.verifyToken}. It expires in 15 minutes.`
+      `Your verification code is ${this.verifyToken}. It expires in 15 minutes.`,
     )
   }
 
   sendPasswordResetEmail(
-    appDomain = process.env.APP_BASE_URL || 'http://localhost:3000'
+    appDomain = process.env.APP_BASE_URL || 'http://localhost:3000',
   ) {
     if (!this.email || !this.username || !this.resetPasswordToken) {
       return Promise.reject(
-        new Error('Missing email, username, or reset token.')
+        new Error('Missing email, username, or reset token.'),
       )
     }
-    const url = `${appDomain}/auth/reset-password/${this.resetPasswordToken}`
+    const url = `${appDomain}/reset-password/${this.resetPasswordToken}`
     return sendEmail(
       this.email,
       `${this.username}`,
       'Reset Password',
-      `Please click <a href="${url}">here</a> to reset your password. If you did not request a password reset, someone may be trying to access your account.`
+      `Please click <a href="${url}">here</a> to reset your password. If you did not request a password reset, someone may be trying to access your account.`,
     )
   }
 
@@ -554,7 +554,7 @@ export default class User implements Account {
   static async findByResetPasswordToken(token: string): Promise<User | null> {
     const r = await query(
       'SELECT * FROM users WHERE reset_password_token = $1',
-      [token]
+      [token],
     )
     return r.rowCount ? User.parseRow(r.rows[0]) : null
   }
