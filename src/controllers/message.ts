@@ -68,6 +68,10 @@ export const getMessages = async (req: Request, res: Response) => {
       return messageData
     })
 
+    if (req.userId) {
+      Conversation.recordVisit(req.userId, convoId).catch(() => {})
+    }
+
     return res.status(200).json({
       messages: enrichedMessages,
       pageInfo: result.pageInfo,

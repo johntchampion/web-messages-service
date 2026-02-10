@@ -278,6 +278,252 @@ describe('Conversation Model', () => {
     })
   })
 
+  describe('recordVisit', () => {
+    it('should upsert a visit record', async () => {
+      mockQuery.mockResolvedValue(createMockQueryResult([], 1))
+
+      await Conversation.recordVisit(
+        '550e8400-e29b-41d4-a716-446655440000',
+        '770e8400-e29b-41d4-a716-446655440002'
+      )
+
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO conversation_visits'),
+        ['550e8400-e29b-41d4-a716-446655440000', '770e8400-e29b-41d4-a716-446655440002']
+      )
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('ON CONFLICT'),
+        expect.any(Array)
+      )
+    })
+
+    it('should propagate database errors', async () => {
+      mockQuery.mockRejectedValue(new Error('DB error'))
+
+      await expect(
+        Conversation.recordVisit(
+          '550e8400-e29b-41d4-a716-446655440000',
+          '770e8400-e29b-41d4-a716-446655440002'
+        )
+      ).rejects.toThrow('DB error')
+    })
+  })
+
+  describe('removeVisit', () => {
+    it('should return true when a visit record was deleted', async () => {
+      mockQuery.mockResolvedValue(createMockQueryResult([], 1))
+
+      const result = await Conversation.removeVisit(
+        '550e8400-e29b-41d4-a716-446655440000',
+        '770e8400-e29b-41d4-a716-446655440002'
+      )
+
+      expect(result).toBe(true)
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('DELETE FROM conversation_visits'),
+        ['550e8400-e29b-41d4-a716-446655440000', '770e8400-e29b-41d4-a716-446655440002']
+      )
+    })
+
+    it('should return false when no visit record was found', async () => {
+      mockQuery.mockResolvedValue(createMockQueryResult([], 0))
+
+      const result = await Conversation.removeVisit(
+        '550e8400-e29b-41d4-a716-446655440000',
+        '770e8400-e29b-41d4-a716-446655440002'
+      )
+
+      expect(result).toBe(false)
+    })
+  })
+
+  describe('findByVisitor', () => {
+    it('should return conversations visited by user', async () => {
+      const mockRows = [
+        createMockConversationRow({
+          convo_id: '770e8400-e29b-41d4-a716-446655440003',
+          name: 'Visited Conversation 1',
+        }),
+        createMockConversationRow({
+          convo_id: '770e8400-e29b-41d4-a716-446655440004',
+          name: 'Visited Conversation 2',
+        }),
+      ]
+      mockQuery.mockResolvedValue(createMockQueryResult(mockRows, 2))
+
+      const conversations = await Conversation.findByVisitor('550e8400-e29b-41d4-a716-446655440000')
+
+      expect(conversations).toHaveLength(2)
+      expect(conversations[0]).toBeInstanceOf(Conversation)
+      expect(conversations[0].name).toBe('Visited Conversation 1')
+      expect(conversations[1].name).toBe('Visited Conversation 2')
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('INNER JOIN conversation_visits'),
+        ['550e8400-e29b-41d4-a716-446655440000']
+      )
+    })
+
+    it('should filter by owned conversations when ownedOnly is true', async () => {
+      const mockRows = [
+        createMockConversationRow({
+          convo_id: '770e8400-e29b-41d4-a716-446655440003',
+          creator_id: '550e8400-e29b-41d4-a716-446655440000',
+        }),
+      ]
+      mockQuery.mockResolvedValue(createMockQueryResult(mockRows, 1))
+
+      const conversations = await Conversation.findByVisitor(
+        '550e8400-e29b-41d4-a716-446655440000',
+        true
+      )
+
+      expect(conversations).toHaveLength(1)
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('c.creator_id = $1'),
+        ['550e8400-e29b-41d4-a716-446655440000']
+      )
+    })
+
+    it('should not filter by creator when ownedOnly is false', async () => {
+      mockQuery.mockResolvedValue(createMockQueryResult([], 0))
+
+      await Conversation.findByVisitor('550e8400-e29b-41d4-a716-446655440000', false)
+
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.not.stringContaining('creator_id'),
+        ['550e8400-e29b-41d4-a716-446655440000']
+      )
+    })
+
+    it('should return empty array when no visits found', async () => {
+      mockQuery.mockResolvedValue(createMockQueryResult([], 0))
+
+      const conversations = await Conversation.findByVisitor('550e8400-e29b-41d4-a716-446655440000')
+
+      expect(conversations).toHaveLength(0)
+    })
+
+    it('should order by visited_at descending', async () => {
+      mockQuery.mockResolvedValue(createMockQueryResult([], 0))
+
+      await Conversation.findByVisitor('550e8400-e29b-41d4-a716-446655440000')
+
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('ORDER BY cv.visited_at DESC'),
+        expect.any(Array)
+      )
+    })
+  })
+
+  describe('findForUser', () => {
+    it('should return both visited and owned conversations', async () => {
+      const mockRows = [
+        createMockConversationRow({
+          convo_id: '770e8400-e29b-41d4-a716-446655440003',
+          name: 'Visited Conversation',
+          visited_at: new Date('2024-01-10'),
+        }),
+        createMockConversationRow({
+          convo_id: '770e8400-e29b-41d4-a716-446655440004',
+          name: 'Owned Conversation',
+          creator_id: '550e8400-e29b-41d4-a716-446655440000',
+          visited_at: null,
+        }),
+      ]
+      mockQuery.mockResolvedValue(createMockQueryResult(mockRows, 2))
+
+      const conversations = await Conversation.findForUser('550e8400-e29b-41d4-a716-446655440000')
+
+      expect(conversations).toHaveLength(2)
+      expect(conversations[0]).toBeInstanceOf(Conversation)
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('LEFT JOIN conversation_visits'),
+        ['550e8400-e29b-41d4-a716-446655440000']
+      )
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('WHERE cv.user_id = $1 OR c.creator_id = $1'),
+        expect.any(Array)
+      )
+    })
+
+    it('should return owned conversations even when not visited', async () => {
+      const mockRows = [
+        createMockConversationRow({
+          convo_id: '770e8400-e29b-41d4-a716-446655440005',
+          name: 'Owned but Not Visited',
+          creator_id: '550e8400-e29b-41d4-a716-446655440000',
+        }),
+      ]
+      mockQuery.mockResolvedValue(createMockQueryResult(mockRows, 1))
+
+      const conversations = await Conversation.findForUser('550e8400-e29b-41d4-a716-446655440000')
+
+      expect(conversations).toHaveLength(1)
+      expect(conversations[0].name).toBe('Owned but Not Visited')
+      expect(conversations[0].creatorId).toBe('550e8400-e29b-41d4-a716-446655440000')
+    })
+
+    it('should filter by owned conversations when ownedOnly is true', async () => {
+      const mockRows = [
+        createMockConversationRow({
+          convo_id: '770e8400-e29b-41d4-a716-446655440006',
+          creator_id: '550e8400-e29b-41d4-a716-446655440000',
+        }),
+      ]
+      mockQuery.mockResolvedValue(createMockQueryResult(mockRows, 1))
+
+      const conversations = await Conversation.findForUser(
+        '550e8400-e29b-41d4-a716-446655440000',
+        true
+      )
+
+      expect(conversations).toHaveLength(1)
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('WHERE c.creator_id = $1'),
+        ['550e8400-e29b-41d4-a716-446655440000']
+      )
+    })
+
+    it('should order by visited_at DESC NULLS LAST, then updated_at DESC', async () => {
+      mockQuery.mockResolvedValue(createMockQueryResult([], 0))
+
+      await Conversation.findForUser('550e8400-e29b-41d4-a716-446655440000')
+
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('ORDER BY cv.visited_at DESC NULLS LAST, c.updated_at DESC'),
+        expect.any(Array)
+      )
+    })
+
+    it('should return empty array when user has no conversations', async () => {
+      mockQuery.mockResolvedValue(createMockQueryResult([], 0))
+
+      const conversations = await Conversation.findForUser('550e8400-e29b-41d4-a716-446655440000')
+
+      expect(conversations).toHaveLength(0)
+    })
+
+    it('should map all fields correctly including visited_at', async () => {
+      const createdAt = new Date('2024-01-01')
+      const updatedAt = new Date('2024-01-02')
+      const visitedAt = new Date('2024-01-05')
+      const mockRow = createMockConversationRow({
+        created_at: createdAt,
+        updated_at: updatedAt,
+        visited_at: visitedAt,
+        creator_id: '550e8400-e29b-41d4-a716-446655440000',
+      })
+      mockQuery.mockResolvedValue(createMockQueryResult([mockRow], 1))
+
+      const conversations = await Conversation.findForUser('550e8400-e29b-41d4-a716-446655440000')
+
+      expect(conversations[0].createdAt).toEqual(createdAt)
+      expect(conversations[0].updatedAt).toEqual(updatedAt)
+      expect(conversations[0].creatorId).toBe('550e8400-e29b-41d4-a716-446655440000')
+      expect(conversations[0].visitedAt).toEqual(visitedAt)
+    })
+  })
+
   describe('findByAge', () => {
     it('should return conversations older than specified days', async () => {
       const mockRows = [
