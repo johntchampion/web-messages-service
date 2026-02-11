@@ -6,7 +6,7 @@ import { authentication, authorization } from '../middleware/auth'
 
 const router = Router()
 
-router.get('/messages', messageController.getMessages)
+router.get('/messages', authentication, messageController.getMessages)
 
 router.post(
   '/message',

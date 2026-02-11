@@ -13,7 +13,11 @@ router.get(
   conversationController.getConversations
 )
 
-router.get('/conversations/:convoId', conversationController.getConversation)
+router.get(
+  '/conversations/:convoId',
+  authentication,
+  conversationController.getConversation
+)
 
 router.post(
   '/conversations',
@@ -32,6 +36,13 @@ router.delete(
   '/conversations/:convoId',
   authentication, // Only authentication, not authorization - allows anonymous deletion of unowned conversations
   conversationController.deleteConversation
+)
+
+router.delete(
+  '/conversations/:convoId/visit',
+  authentication,
+  authorization,
+  conversationController.removeConversationVisit
 )
 
 export default router

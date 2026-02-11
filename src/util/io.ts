@@ -87,10 +87,10 @@ export const setupSocketIO = (server: http.Server) => {
     /**
      * List messages in a conversation with cursor-based pagination.
      * REST equivalent: GET /messages
-     * Params: { convoId, limit?, before?, after?, order? }
+     * Params: { convoId, limit?, before?, after?, order?, token? }
      */
     socket.on('list-messages', async (params = {}, callback) => {
-      const { convoId, limit, before, after, order } = params
+      const { convoId, limit, before, after, order, token } = params
 
       if (!convoId) {
         callback?.({
@@ -101,6 +101,17 @@ export const setupSocketIO = (server: http.Server) => {
       }
 
       try {
+        const auth = await authenticateSocketEvent(token)
+
+        // If a token was provided but is invalid, return explicit error
+        if (auth !== null && !auth.success) {
+          callback?.({
+            success: false,
+            error: auth.error,
+          })
+          return
+        }
+
         const conversation = await Conversation.findById(convoId)
         const result = await Message.listByConversation(convoId, {
           limit: limit ? parseInt(limit) : undefined,
@@ -108,6 +119,10 @@ export const setupSocketIO = (server: http.Server) => {
           after,
           order,
         })
+
+        if (auth && auth.success) {
+          Conversation.recordVisit(auth.userId, convoId).catch(() => {})
+        }
 
         // Extract unique sender IDs from messages
         const senderIds = Array.from(
@@ -252,10 +267,10 @@ export const setupSocketIO = (server: http.Server) => {
     /**
      * List all conversations for authenticated user.
      * REST equivalent: GET /conversations
-     * Params: { token }
+     * Params: { token, owned? }
      */
     socket.on('list-conversations', async (params = {}, callback) => {
-      const { token } = params
+      const { token, owned } = params
 
       const auth = await authenticateSocketEvent(token)
 
@@ -278,7 +293,7 @@ export const setupSocketIO = (server: http.Server) => {
       }
 
       try {
-        const conversations = await Conversation.findByUserId(auth.userId)
+        const conversations = await Conversation.findForUser(auth.userId, owned === true)
 
         callback?.({
           success: true,
@@ -304,10 +319,10 @@ export const setupSocketIO = (server: http.Server) => {
     /**
      * Get a single conversation by ID.
      * REST equivalent: GET /conversations/:convoId
-     * Params: { convoId }
+     * Params: { convoId, token? }
      */
     socket.on('get-conversation', async (params = {}, callback) => {
-      const { convoId } = params
+      const { convoId, token } = params
 
       if (!convoId) {
         callback?.({
@@ -318,7 +333,22 @@ export const setupSocketIO = (server: http.Server) => {
       }
 
       try {
+        const auth = await authenticateSocketEvent(token)
+
+        // If a token was provided but is invalid, return explicit error
+        if (auth !== null && !auth.success) {
+          callback?.({
+            success: false,
+            error: auth.error,
+          })
+          return
+        }
+
         const conversation = await Conversation.findById(convoId)
+
+        if (auth && auth.success) {
+          Conversation.recordVisit(auth.userId, convoId).catch(() => {})
+        }
 
         callback?.({
           success: true,
@@ -372,6 +402,10 @@ export const setupSocketIO = (server: http.Server) => {
           creatorId: auth && auth.success ? auth.userId : null,
         })
         await newConversation.update()
+
+        if (auth && auth.success && newConversation.id) {
+          Conversation.recordVisit(auth.userId, newConversation.id).catch(() => {})
+        }
 
         callback?.({
           success: true,
@@ -526,6 +560,61 @@ export const setupSocketIO = (server: http.Server) => {
           error instanceof Error
             ? error.message
             : 'There was an error deleting the conversation.'
+        callback?.({
+          success: false,
+          error: message,
+        })
+      }
+    })
+
+    /**
+     * Remove a conversation from the user's visited list.
+     * REST equivalent: DELETE /conversations/:convoId/visit
+     * Params: { convoId, token }
+     */
+    socket.on('remove-conversation-visit', async (params = {}, callback) => {
+      const { convoId, token } = params
+
+      if (!convoId) {
+        callback?.({
+          success: false,
+          error: 'Conversation ID is required.',
+        })
+        return
+      }
+
+      const auth = await authenticateSocketEvent(token)
+
+      // No token provided
+      if (!auth) {
+        callback?.({
+          success: false,
+          error: 'Authentication required.',
+        })
+        return
+      }
+
+      // Token provided but invalid/expired
+      if (!auth.success) {
+        callback?.({
+          success: false,
+          error: auth.error,
+        })
+        return
+      }
+
+      try {
+        const removed = await Conversation.removeVisit(auth.userId, convoId)
+
+        callback?.({
+          success: true,
+          data: { removed },
+        })
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'There was an error removing the conversation visit.'
         callback?.({
           success: false,
           error: message,

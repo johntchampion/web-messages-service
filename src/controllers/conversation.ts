@@ -4,7 +4,8 @@ import Conversation from '../models/conversation'
 
 export const getConversations = async (req: Request, res: Response) => {
   try {
-    const conversations = await Conversation.findByUserId(req.userId!)
+    const owned = req.query.owned === 'true'
+    const conversations = await Conversation.findForUser(req.userId!, owned)
 
     return res.status(200).json({
       conversations: conversations.map((convo) => ({
@@ -27,6 +28,10 @@ export const getConversation = async (req: Request, res: Response) => {
 
   try {
     const conversation = await Conversation.findById(convoId)
+
+    if (req.userId) {
+      Conversation.recordVisit(req.userId, convoId).catch(() => {})
+    }
 
     return res.status(200).json({
       conversation: conversation,
@@ -54,6 +59,10 @@ export const createConversation = async (req: Request, res: Response) => {
       creatorId: req.userId,
     })
     await newConversation.update()
+
+    if (req.userId && newConversation.id) {
+      Conversation.recordVisit(req.userId, newConversation.id).catch(() => {})
+    }
 
     return res.status(200).json({
       conversation: newConversation,
@@ -130,6 +139,29 @@ export const deleteConversation = async (req: Request, res: Response) => {
       message === 'There is no conversation with that ID.' ? 410 : 500
     return res.status(code).json({
       errorMessage: message,
+    })
+  }
+}
+
+export const removeConversationVisit = async (req: Request, res: Response) => {
+  const convoId: string = req.params.convoId
+
+  try {
+    const removed = await Conversation.removeVisit(req.userId!, convoId)
+
+    if (!removed) {
+      return res.status(404).json({
+        errorMessage: 'No visit record found for this conversation.',
+      })
+    }
+
+    return res.status(200).json({ removed: true })
+  } catch (error) {
+    return res.status(500).json({
+      errorMessage:
+        error instanceof Error
+          ? error.message
+          : 'A server error has occured. Please try again later.',
     })
   }
 }
