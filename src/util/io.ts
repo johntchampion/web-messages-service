@@ -622,6 +622,16 @@ export const setupSocketIO = (server: http.Server) => {
       }
     })
 
+    // ==================== TYPING EVENTS ====================
+
+    /**
+     * Relay typing indicator to other clients in the conversation room.
+     * Params: { convoId, userName }
+     */
+    socket.on('typing', ({ convoId, userName }) => {
+      socket.to(convoId).emit('user-typing', { convoId, userName })
+    })
+
     // ==================== ROOM MANAGEMENT ====================
 
     /**
