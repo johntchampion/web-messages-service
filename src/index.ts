@@ -11,6 +11,7 @@ import { setupSocketIO } from './util/io'
 import authRoutes from './routes/auth'
 import messageRoutes from './routes/message'
 import conversationRoutes from './routes/conversation'
+import pushRoutes from './routes/push'
 import { deleteConversations, deleteExpiredRefreshTokens } from './util/cron'
 
 const app = express()
@@ -29,6 +30,7 @@ app.get('/', (_: Request, res: Response, __: NextFunction) => {
 app.use('/auth', authRoutes)
 app.use(messageRoutes)
 app.use(conversationRoutes)
+app.use('/push', pushRoutes)
 
 app.get('/health-check', (req: Request, res: Response, next: NextFunction) => {
   return res.status(200).json({

@@ -5,6 +5,7 @@ import Message from '../models/message'
 import Conversation from '../models/conversation'
 import User from '../models/user'
 import { getUploadURL } from '../util/upload'
+import { notifyConversationParticipants } from '../util/push'
 
 export const getMessages = async (req: Request, res: Response) => {
   const convoId: string = req.query.convoId as string
@@ -117,6 +118,21 @@ export const createMessage = async (req: Request, res: Response) => {
       senderAvatar: user ? null : userAvatar,
     })
     await newMessage.create()
+
+    // Send push notifications to conversation participants (fire-and-forget)
+    if (user && user.id) {
+      Conversation.findById(convoId)
+        .then((conversation) => {
+          notifyConversationParticipants(
+            convoId,
+            user.id!,
+            content,
+            conversation.name,
+            user.displayName || 'Someone',
+          ).catch(() => {})
+        })
+        .catch(() => {})
+    }
 
     return res.status(200).json({
       message: {

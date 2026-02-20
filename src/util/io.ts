@@ -7,6 +7,7 @@ import Conversation from '../models/conversation'
 import User from '../models/user'
 import { AccessToken } from '../models/user'
 import { getUploadURL } from './upload'
+import { notifyConversationParticipants } from './push'
 
 /**
  * The object used to emit information to sockets.
@@ -250,6 +251,21 @@ export const setupSocketIO = (server: http.Server) => {
         })
 
         broadcastMessage(convoId, newMessage)
+
+        // Send push notifications to conversation participants (fire-and-forget)
+        if (auth && auth.success && user) {
+          Conversation.findById(convoId)
+            .then((conversation) => {
+              notifyConversationParticipants(
+                convoId,
+                auth.userId,
+                content,
+                conversation.name,
+                user.displayName || 'Someone',
+              ).catch(() => {})
+            })
+            .catch(() => {})
+        }
       } catch (error) {
         const message =
           error instanceof Error
