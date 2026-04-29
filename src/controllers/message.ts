@@ -5,6 +5,7 @@ import Message from '../models/message'
 import Conversation from '../models/conversation'
 import User from '../models/user'
 import { getUploadURL } from '../util/upload'
+import { handleAIResponse } from '../util/ai-response'
 
 export const getMessages = async (req: Request, res: Response) => {
   const convoId: string = req.query.convoId as string
@@ -23,8 +24,8 @@ export const getMessages = async (req: Request, res: Response) => {
       new Set(
         result.messages
           .filter((msg) => msg.senderId)
-          .map((msg) => msg.senderId!)
-      )
+          .map((msg) => msg.senderId!),
+      ),
     )
 
     // Fetch user details for all sender IDs
@@ -56,6 +57,8 @@ export const getMessages = async (req: Request, res: Response) => {
         content: msg.content,
         senderName: msg.senderName,
         senderAvatar: msg.senderAvatar,
+        senderType: msg.senderType,
+        agentId: msg.agentId,
       }
 
       // Add user details if this message has a senderId
@@ -104,6 +107,7 @@ export const createMessage = async (req: Request, res: Response) => {
   const content: string = req.body.content
   const userName: string = req.body.userName
   const userAvatar: string = req.body.userAvatar
+  const aiResponse: boolean = req.body.aiResponse === true
 
   const user = req.userId ? await User.findById(req.userId!) : null
 
@@ -117,6 +121,13 @@ export const createMessage = async (req: Request, res: Response) => {
       senderAvatar: user ? null : userAvatar,
     })
     await newMessage.create()
+
+    if (aiResponse) {
+      const conversation = await Conversation.findById(convoId)
+      handleAIResponse(conversation).catch((err) =>
+        console.error('AI response failed:', err),
+      )
+    }
 
     return res.status(200).json({
       message: {

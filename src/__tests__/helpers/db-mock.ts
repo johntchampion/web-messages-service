@@ -55,6 +55,8 @@ export const createMockMessageRow = (overrides: any = {}) => {
     content: 'Test message content',
     sender_name: null,
     sender_avatar: null,
+    sender_type: 'user',
+    agent_id: null,
     ...overrides,
   }
 }
@@ -69,6 +71,21 @@ export const createMockConversationRow = (overrides: any = {}) => {
     updated_at: new Date('2024-01-01'),
     name: 'Test Conversation',
     creator_id: null,
+    ...overrides,
+  }
+}
+
+/**
+ * Mock system agent database row
+ */
+export const createMockSystemAgentRow = (overrides: any = {}) => {
+  return {
+    agent_id: '880e8400-e29b-41d4-a716-446655440003',
+    created_at: new Date('2024-01-01'),
+    updated_at: new Date('2024-01-01'),
+    display_name: 'Gemma',
+    model_name: 'gemma4',
+    avatar_url: null,
     ...overrides,
   }
 }

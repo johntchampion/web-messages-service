@@ -2,6 +2,7 @@ import query from '../util/db'
 import isUUID from '../util/uuid'
 
 export type ContentType = 'text' | 'image'
+export type SenderType = 'user' | 'anonymous' | 'system'
 
 /**
  * Mirrors DB columns; everything optional so we can do partial updates safely.
@@ -16,6 +17,8 @@ export interface MessageProps {
   content: string
   senderName?: string | null
   senderAvatar?: string | null
+  senderType?: SenderType | null
+  agentId?: string | null
 }
 
 export interface MessagePatch {
@@ -25,6 +28,8 @@ export interface MessagePatch {
   content?: string
   senderName?: string | null
   senderAvatar?: string | null
+  senderType?: SenderType | null
+  agentId?: string | null
 }
 
 export interface ListOptions {
@@ -54,6 +59,8 @@ export default class Message implements MessageProps {
   content: string
   senderName?: string | null
   senderAvatar?: string | null
+  senderType?: SenderType | null
+  agentId?: string | null
 
   constructor(props: MessageProps) {
     this.id = props.id
@@ -65,6 +72,8 @@ export default class Message implements MessageProps {
     this.content = props.content
     this.senderName = props.senderName ?? null
     this.senderAvatar = props.senderAvatar ?? null
+    this.senderType = props.senderType ?? null
+    this.agentId = props.agentId ?? null
   }
 
   // ----------------- Create -----------------
@@ -77,9 +86,10 @@ export default class Message implements MessageProps {
 
     const sql = `
       INSERT INTO messages (
-        convo_id, sender_id, type, content, sender_name, sender_avatar
+        convo_id, sender_id, type, content, sender_name, sender_avatar,
+        sender_type, agent_id
       )
-      VALUES ($1, $2, $3::content_type, $4, $5, $6)
+      VALUES ($1, $2, $3::content_type, $4, $5, $6, $7::message_sender_type, $8)
       RETURNING *
     `
     const params = [
@@ -89,6 +99,8 @@ export default class Message implements MessageProps {
       this.content,
       this.senderName ?? null,
       this.senderAvatar ?? null,
+      this.senderType ?? (this.agentId ? 'system' : this.senderId ? 'user' : 'anonymous'),
+      this.agentId ?? null,
     ]
 
     try {
@@ -99,6 +111,7 @@ export default class Message implements MessageProps {
       }
       throw new Error('Insert returned no rows.')
     } catch (error) {
+      console.error(error)
       throw new Error('Failed to insert message.')
     }
   }
@@ -137,6 +150,8 @@ export default class Message implements MessageProps {
     if ('senderName' in patch) push('sender_name', patch.senderName ?? null)
     if ('senderAvatar' in patch)
       push('sender_avatar', patch.senderAvatar ?? null)
+    if ('senderType' in patch) push('sender_type', patch.senderType ?? 'user')
+    if ('agentId' in patch) push('agent_id', patch.agentId ?? null)
 
     if (sets.length === 0) return this.reload()
 
@@ -197,7 +212,7 @@ export default class Message implements MessageProps {
    */
   static async listByConversation(
     convoId: string,
-    opts: ListOptions = {}
+    opts: ListOptions = {},
   ): Promise<{
     messages: Message[]
     pageInfo: {
@@ -222,14 +237,14 @@ export default class Message implements MessageProps {
     if (opts.before) {
       // strictly older than the tuple
       whereParts.push(
-        `(m.created_at, m.message_id) < ($${++paramIdx}, $${++paramIdx}::uuid)`
+        `(m.created_at, m.message_id) < ($${++paramIdx}, $${++paramIdx}::uuid)`,
       )
       params.push(opts.before.createdAt, opts.before.id)
     }
     if (opts.after) {
       // strictly newer than the tuple
       whereParts.push(
-        `(m.created_at, m.message_id) > ($${++paramIdx}, $${++paramIdx}::uuid)`
+        `(m.created_at, m.message_id) > ($${++paramIdx}, $${++paramIdx}::uuid)`,
       )
       params.push(opts.after.createdAt, opts.after.id)
     }
@@ -285,6 +300,8 @@ export default class Message implements MessageProps {
       content: row['content'],
       senderName: row['sender_name'],
       senderAvatar: row['sender_avatar'],
+      senderType: row['sender_type'],
+      agentId: row['agent_id'],
     })
   }
 }

@@ -65,6 +65,7 @@ Required environment variables (create a `.env` file in the root):
 - `MAILJET_API_KEY` - API key to authenticate with Mailjet
 - `MAILJET_API_SECRET` - API secret to authenticate with Mailjet
 - `NODE_ENV` - Set to 'test' to enable additional logging
+- `OLLAMA_HOST` - Ollama server URL for AI messages (defaults to `http://localhost:11434`)
 
 ## Architecture
 
@@ -118,7 +119,8 @@ All models follow a consistent pattern:
 - Represents individual messages in conversations
 - Content limited to 4096 bytes (validated before DB insert)
 - Supports types: 'text' or 'image'
-- Can have an associated `senderId` (for logged-in users) or be anonymous with `senderName`/`senderAvatar`
+- `senderType` field: `'user'` (authenticated), `'anonymous'` (no auth), or `'system'` (AI/agent)
+- Can have an associated `senderId` (for logged-in users), be anonymous with `senderName`/`senderAvatar`, or be a system message with `agentId`
 - Cursor-based pagination with `listByConversation()` supporting `before`/`after` cursors and `asc`/`desc` ordering
 - Uses composite key `(created_at, message_id)` for stable pagination
 
@@ -128,6 +130,13 @@ All models follow a consistent pattern:
 - Auto-deleted after 30 days of inactivity (via cron job)
 - `getDeletionDate()` calculates when conversation will be deleted
 - `findByAge()` queries conversations by age, optionally deleting them
+
+**SystemAgent** (`src/models/system-agent.ts`):
+
+- Represents AI/system agents that can send messages in conversations
+- Stored in `system_agents` table with unique `name` constraint
+- Static methods: `findByName()`, `findOrCreate()` (upsert pattern)
+- Referenced by `messages.agent_id` when `sender_type = 'system'`
 
 ### Authentication & Authorization
 
@@ -147,21 +156,18 @@ Additional middleware:
 The application uses a dual-token system for enhanced security:
 
 - **Access Tokens** (1 hour expiry):
-
   - Contains `userId`, `verified`, and `tokenVersion`
   - Used for authenticating API requests
   - Short-lived for security
   - Validated against `tokenVersion` on the user record
 
 - **Refresh Tokens** (7 days expiry):
-
   - Contains only `userId`
   - Used exclusively to obtain new access tokens
   - Stored in `sessions` database table
   - Longer-lived for user convenience
 
 - **Sessions Table**:
-
   - Tracks all issued refresh tokens
   - Enables server-side token revocation
   - Allows invalidation on password change
@@ -181,6 +187,7 @@ The application uses a dual-token system for enhanced security:
 
 - `get-messages` - Fetch messages for a conversation (params: `{ convoId }`)
 - `send-message` - Send a new message (params: `{ convoId, content, userName, userAvatar }`)
+- `create-message` - Send a new message (params: `{ convoId, content, userName?, userAvatar?, token?, aiResponse? }`). When `aiResponse` is true, triggers an AI response via Ollama
 - `create-conversation` - Create new conversation (params: `{ name }`)
 - `delete-conversation` - Delete conversation (params: `{ convoId }`)
 
@@ -222,7 +229,7 @@ Routes use `express-validator` for input validation:
 **Message Routes**:
 
 - `GET /messages` - List messages (defined in `src/routes/message.ts`)
-- `POST /message` - Create message (requires auth)
+- `POST /message` - Create message (requires auth). Accepts optional `aiResponse: boolean` to trigger an AI response in the conversation
 
 **Conversation Routes**:
 
@@ -329,3 +336,21 @@ Messages have a 4096-byte limit (validated in-memory before database insert to f
 ### Conversation Lifecycle
 
 Conversations are soft-expired based on `updated_at` timestamp. The cron job permanently deletes conversations (and cascades to messages) after 30 days of inactivity.
+
+### AI Messages
+
+When a user sends a message with `aiResponse: true` (via REST or Socket.IO), the system:
+
+1. Saves the user's message normally and responds immediately
+2. Asynchronously fetches the last 50 messages for conversation context
+3. Finds or creates the `gemma4` agent in the `system_agents` table
+4. Queries Ollama (`gemma4` model) via `src/util/ollama.ts`
+5. Saves the AI response as a `sender_type = 'system'` message with the agent's `agent_id`
+6. Broadcasts the AI message to the conversation room via Socket.IO
+
+**Key files:**
+- `src/util/ollama.ts` — Ollama client, message mapping, response generation
+- `src/util/ai-response.ts` — Orchestrator (fire-and-forget, errors logged not propagated)
+- `src/models/system-agent.ts` — Agent model with `findOrCreate()` upsert
+
+The AI response is non-blocking: the user's request returns before AI generation starts. If Ollama is unreachable or fails, the error is logged and the user's message is unaffected.
