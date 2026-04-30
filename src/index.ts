@@ -7,6 +7,7 @@ import dotenv from 'dotenv'
 dotenv.config({ path: path.join(__dirname, '..', '.env') })
 
 import RequestError from './util/error'
+import { aiEnabled } from './util/ollama'
 import { setupSocketIO } from './util/io'
 import authRoutes from './routes/auth'
 import messageRoutes from './routes/message'
@@ -36,7 +37,8 @@ app.get('/health-check', (req: Request, res: Response, next: NextFunction) => {
     features: {
       verifyUsersEnabled: process.env.VERIFY_USERS === 'true',
       emailSendingEnabled: process.env.ENABLE_EMAILS === 'true',
-      imageUploadsEnabled: process.env.ENABLE_UPLOADS == 'true',
+      imageUploadsEnabled: process.env.ENABLE_UPLOADS === 'true',
+      aiResponsesEnabled: aiEnabled,
     },
   })
 })

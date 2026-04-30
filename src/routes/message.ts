@@ -13,6 +13,7 @@ router.post(
   authentication,
   body('convoId').exists().withMessage('Conversation ID is required.'),
   body('content').exists().withMessage('Message content is required.'),
+  body('aiResponse').optional().isBoolean().withMessage('aiResponse must be a boolean.'),
   messageController.createMessage
 )
 

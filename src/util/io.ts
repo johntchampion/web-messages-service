@@ -7,6 +7,7 @@ import Conversation from '../models/conversation'
 import User from '../models/user'
 import { AccessToken } from '../models/user'
 import { getUploadURL } from './upload'
+import { handleAIResponse } from './ai-response'
 
 /**
  * The object used to emit information to sockets.
@@ -32,7 +33,7 @@ const authenticateSocketEvent = async (token?: string): Promise<AuthResult> => {
   try {
     const decodedToken = jwt.verify(
       token,
-      process.env.TOKEN_SECRET as string
+      process.env.TOKEN_SECRET as string,
     ) as AccessToken
 
     // Validate tokenVersion against the user's current tokenVersion
@@ -129,8 +130,8 @@ export const setupSocketIO = (server: http.Server) => {
           new Set(
             result.messages
               .filter((msg) => msg.senderId)
-              .map((msg) => msg.senderId!)
-          )
+              .map((msg) => msg.senderId!),
+          ),
         )
 
         // Fetch user details for all sender IDs
@@ -140,7 +141,7 @@ export const setupSocketIO = (server: http.Server) => {
         >()
         if (senderIds.length > 0) {
           const users = await Promise.all(
-            senderIds.map((id) => User.findById(id))
+            senderIds.map((id) => User.findById(id)),
           )
           users.forEach((user) => {
             if (user && user.id) {
@@ -164,6 +165,8 @@ export const setupSocketIO = (server: http.Server) => {
             content: msg.content,
             senderName: msg.senderName,
             senderAvatar: msg.senderAvatar,
+            senderType: msg.senderType,
+            agentId: msg.agentId,
           }
 
           // Add user details if this message has a senderId
@@ -203,7 +206,8 @@ export const setupSocketIO = (server: http.Server) => {
      * Params: { convoId, content, userName?, userAvatar?, token? }
      */
     socket.on('create-message', async (params = {}, callback) => {
-      const { convoId, content, userName, userAvatar, token } = params
+      const { convoId, content, userName, userAvatar, token, aiResponse } =
+        params
 
       if (!convoId || !content) {
         callback?.({
@@ -250,6 +254,13 @@ export const setupSocketIO = (server: http.Server) => {
         })
 
         broadcastMessage(convoId, newMessage)
+
+        if (aiResponse === true) {
+          const conversation = await Conversation.findById(convoId)
+          handleAIResponse(conversation).catch((err) =>
+            console.error('AI response failed:', err),
+          )
+        }
       } catch (error) {
         const message =
           error instanceof Error
@@ -293,7 +304,10 @@ export const setupSocketIO = (server: http.Server) => {
       }
 
       try {
-        const conversations = await Conversation.findForUser(auth.userId, owned === true)
+        const conversations = await Conversation.findForUser(
+          auth.userId,
+          owned === true,
+        )
 
         callback?.({
           success: true,
@@ -404,7 +418,9 @@ export const setupSocketIO = (server: http.Server) => {
         await newConversation.update()
 
         if (auth && auth.success && newConversation.id) {
-          Conversation.recordVisit(auth.userId, newConversation.id).catch(() => {})
+          Conversation.recordVisit(auth.userId, newConversation.id).catch(
+            () => {},
+          )
         }
 
         callback?.({
@@ -695,6 +711,15 @@ export const setupSocketIO = (server: http.Server) => {
 }
 
 /**
+ * Emits a user-typing event to all clients in a conversation room.
+ * @param convoId The conversation room to broadcast to.
+ * @param userName The display name to show in the typing indicator.
+ */
+export const broadcastTypingIndicator = (convoId: string, userName: string) => {
+  io?.to(convoId).emit('user-typing', { convoId, userName })
+}
+
+/**
  * Broadcasts a message to all participants in a conversation room.
  * @param convoId The conversation room to broadcast to.
  * @param message The message to broadcast.
@@ -713,7 +738,7 @@ export const broadcastMessage = (convoId: string, message: Message) => {
  */
 export const broadcastConversationUpdate = (
   convoId: string,
-  conversation: Conversation
+  conversation: Conversation,
 ) => {
   io?.to(convoId).emit('conversation-updated', {
     conversation,
@@ -738,7 +763,11 @@ export const broadcastConversationDeletion = (convoId: string) => {
  */
 export const broadcastUserProfileUpdate = (
   convoIds: string[],
-  payload: { userId: string; displayName?: string; profilePicURL?: string | null }
+  payload: {
+    userId: string
+    displayName?: string
+    profilePicURL?: string | null
+  },
 ) => {
   convoIds.forEach((convoId) => {
     io?.to(convoId).emit('user-updated', {
