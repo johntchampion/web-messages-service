@@ -23,6 +23,7 @@ export async function handleAIResponse(
   const agent = await SystemAgent.findOrCreate({
     displayName: 'Gemma',
     modelName: 'gemma4',
+    avatarUrl: 'robot',
   })
 
   // Emit immediately, then re-emit every 1500ms to keep the frontend debounce
