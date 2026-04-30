@@ -7,7 +7,10 @@ import * as ioUtil from '../../util/io'
 
 jest.mock('../../models/message')
 jest.mock('../../models/system-agent')
-jest.mock('../../util/ollama')
+jest.mock('../../util/ollama', () => ({
+  aiEnabled: true,
+  generateAIResponse: jest.fn(),
+}))
 jest.mock('../../util/io', () => ({
   broadcastMessage: jest.fn(),
   broadcastTypingIndicator: jest.fn(),
@@ -84,6 +87,7 @@ describe('AI Response Orchestrator', () => {
     expect(mockFindOrCreate).toHaveBeenCalledWith({
       displayName: 'Gemma',
       modelName: 'gemma4',
+      avatarUrl: 'robot',
     })
 
     expect(mockGenerateAIResponse).toHaveBeenCalledWith(
