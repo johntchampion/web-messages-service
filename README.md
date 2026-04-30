@@ -77,6 +77,7 @@ Create a `.env` file in the root directory with these variables:
 | SEND_EMAILS      | Enable email sending ('true' or 'false')        | false       |
 | ENABLE_UPLOADS   | Enable image uploads ('true' or 'false')        | false       |
 | SENDGRID_API_KEY | SendGrid API key (required if SEND_EMAILS=true) |             |
+| OLLAMA_HOST      | Ollama server URL — enables AI responses when set | http://localhost:11434 |
 | NODE_ENV         | Environment mode ('production' or 'test')       |             |
 
 ## Installation
@@ -146,7 +147,7 @@ docker run -p 8000:8000 --env-file .env messages-service
 **GET** `/health-check`
 
 - Returns service status and feature flags
-- Response: `{ message, features: { verifyUsersEnabled, emailSendingEnabled, imageUploadsEnabled } }`
+- Response: `{ message, features: { verifyUsersEnabled, emailSendingEnabled, imageUploadsEnabled, aiResponsesEnabled } }`
 
 **GET** `/`
 

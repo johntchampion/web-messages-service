@@ -1,7 +1,7 @@
 import Message from '../models/message'
 import SystemAgent from '../models/system-agent'
 import Conversation from '../models/conversation'
-import { generateAIResponse } from './ollama'
+import { aiEnabled, generateAIResponse } from './ollama'
 import { broadcastMessage, broadcastTypingIndicator } from './io'
 
 /**
@@ -18,6 +18,8 @@ import { broadcastMessage, broadcastTypingIndicator } from './io'
 export async function handleAIResponse(
   conversation: Conversation,
 ): Promise<void> {
+  if (!aiEnabled) return
+
   const agent = await SystemAgent.findOrCreate({
     displayName: 'Gemma',
     modelName: 'gemma4',

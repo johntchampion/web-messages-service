@@ -3,8 +3,10 @@ import Message from '../models/message'
 import Conversation from '../models/conversation'
 import SystemAgent from '../models/system-agent'
 
+export const aiEnabled = !!process.env.OLLAMA_HOST
+
 const ollama = new Ollama({
-  host: process.env.OLLAMA_HOST || 'http://localhost:11434',
+  host: process.env.OLLAMA_HOST ?? 'http://localhost:11434',
 })
 
 const MAX_CONTEXT_MESSAGES = 50
