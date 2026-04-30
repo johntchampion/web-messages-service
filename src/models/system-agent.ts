@@ -45,12 +45,12 @@ export default class SystemAgent implements SystemAgentProps {
     modelName: string
     avatarUrl?: string | null
   }): Promise<SystemAgent> {
-    const existing = await SystemAgent.findByModelName(props.modelName)
-    if (existing) return existing
-
     const sql = `
       INSERT INTO system_agents (display_name, model_name, avatar_url)
       VALUES ($1, $2, $3)
+      ON CONFLICT (model_name) DO UPDATE
+        SET display_name = EXCLUDED.display_name,
+            avatar_url = EXCLUDED.avatar_url
       RETURNING *
     `
     const params = [props.displayName, props.modelName, props.avatarUrl ?? null]
@@ -59,7 +59,7 @@ export default class SystemAgent implements SystemAgentProps {
     if (result.rowCount && result.rowCount > 0) {
       return SystemAgent.parseRow(result.rows[0])
     }
-    throw new Error('Failed to insert system agent.')
+    throw new Error('Failed to upsert system agent.')
   }
 
   /**

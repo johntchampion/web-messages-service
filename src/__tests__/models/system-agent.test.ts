@@ -67,7 +67,7 @@ describe('SystemAgent Model', () => {
   })
 
   describe('findOrCreate', () => {
-    it('should return existing agent if found', async () => {
+    it('should upsert and return the agent', async () => {
       const mockRow = createMockSystemAgentRow()
       mockQuery.mockResolvedValue(createMockQueryResult([mockRow], 1))
 
@@ -76,38 +76,37 @@ describe('SystemAgent Model', () => {
         modelName: 'gemma4',
       })
 
-      expect(mockQuery).toHaveBeenCalledTimes(1) // Only the findByModelName query
-      expect(agent.modelName).toBe('gemma4')
-    })
-
-    it('should create a new agent if not found', async () => {
-      const mockRow = createMockSystemAgentRow()
-      // First call (findByModelName) returns empty, second call (INSERT) returns the row
-      mockQuery
-        .mockResolvedValueOnce(createMockQueryResult([], 0))
-        .mockResolvedValueOnce(createMockQueryResult([mockRow], 1))
-
-      const agent = await SystemAgent.findOrCreate({
-        displayName: 'Gemma',
-        modelName: 'gemma4',
-      })
-
-      expect(mockQuery).toHaveBeenCalledTimes(2)
-      expect(mockQuery).toHaveBeenLastCalledWith(
-        expect.stringContaining('INSERT INTO system_agents'),
+      expect(mockQuery).toHaveBeenCalledTimes(1)
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('ON CONFLICT (model_name)'),
         ['Gemma', 'gemma4', null]
       )
       expect(agent.modelName).toBe('gemma4')
     })
 
-    it('should throw if insert returns no rows', async () => {
-      mockQuery
-        .mockResolvedValueOnce(createMockQueryResult([], 0))
-        .mockResolvedValueOnce(createMockQueryResult([], 0))
+    it('should include avatarUrl when provided', async () => {
+      const mockRow = createMockSystemAgentRow({ avatar_url: 'http://example.com/avatar.png' })
+      mockQuery.mockResolvedValue(createMockQueryResult([mockRow], 1))
+
+      const agent = await SystemAgent.findOrCreate({
+        displayName: 'Gemma',
+        modelName: 'gemma4',
+        avatarUrl: 'http://example.com/avatar.png',
+      })
+
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO system_agents'),
+        ['Gemma', 'gemma4', 'http://example.com/avatar.png']
+      )
+      expect(agent.avatarUrl).toBe('http://example.com/avatar.png')
+    })
+
+    it('should throw if upsert returns no rows', async () => {
+      mockQuery.mockResolvedValue(createMockQueryResult([], 0))
 
       await expect(
         SystemAgent.findOrCreate({ displayName: 'Gemma', modelName: 'gemma4' })
-      ).rejects.toThrow('Failed to insert system agent.')
+      ).rejects.toThrow('Failed to upsert system agent.')
     })
   })
 

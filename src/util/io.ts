@@ -255,7 +255,7 @@ export const setupSocketIO = (server: http.Server) => {
 
         broadcastMessage(convoId, newMessage)
 
-        if (aiResponse) {
+        if (aiResponse === true) {
           const conversation = await Conversation.findById(convoId)
           handleAIResponse(conversation).catch((err) =>
             console.error('AI response failed:', err),
