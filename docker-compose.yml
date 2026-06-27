@@ -1,0 +1,53 @@
+services:
+  db:
+    build: ./database
+    container_name: web-messages-db
+    command: ["postgres", "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
+    # Secrets are sourced from this repo's single .env file. Postgres expects
+    # POSTGRES_* names, so we map them from the app's PG* variables.
+    environment:
+      - POSTGRES_USER=${PGUSER:-user}
+      - POSTGRES_PASSWORD=${PGPASSWORD:-password1}
+      - POSTGRES_DB=${PGDATABASE:-messages_db}
+    ports:
+      - "${PGPORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PGUSER:-user} -d ${PGDATABASE:-messages_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - web-messages-network
+
+  service:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: web-messages-service
+    # Load all app config/secrets from the single .env file...
+    env_file:
+      - .env
+    # ...then override the values that only make sense inside the compose
+    # network (the DB is reachable as `db`, not localhost).
+    environment:
+      - PGHOST=db
+      - PGPORT=5432
+    ports:
+      - "${PORT:-8000}:${PORT:-8000}"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - web-messages-network
+
+volumes:
+  postgres_data:
+
+networks:
+  web-messages-network:
+    driver: bridge
