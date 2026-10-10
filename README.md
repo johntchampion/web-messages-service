@@ -19,7 +19,7 @@ This backend service provides a complete messaging platform with:
 
 - **User Authentication**: JWT-based auth with access tokens (1 hour) and refresh tokens (7 days)
 - **Token Versioning**: Automatic token invalidation on password change
-- **Email Verification**: Optional 6-digit verification codes via SendGrid
+- **Email Verification**: Optional 6-digit verification codes via Mailjet
 - **Password Reset**: Secure token-based password reset flow
 - **Real-Time Messaging**: Socket.IO for instant message delivery
 - **Conversation Management**: Create, delete, and manage conversations
@@ -37,7 +37,7 @@ This backend service provides a complete messaging platform with:
 - **Database**: SQLite (via Node's built-in `node:sqlite`)
 - **Real-time**: Socket.IO
 - **Authentication**: JWT (jsonwebtoken) with bcrypt password hashing
-- **Email**: SendGrid
+- **Email**: Mailjet
 - **File Uploads**: Multer
 - **Task Scheduling**: node-cron
 - **Testing**: Jest with ts-jest
@@ -47,7 +47,7 @@ This backend service provides a complete messaging platform with:
 
 - Node.js 24 or higher
 - npm or yarn package manager
-- SendGrid API key (optional, for email features)
+- Mailjet API key and secret (optional, for email features)
 
 ## Environment Variables
 
@@ -63,17 +63,18 @@ Create a `.env` file in the root directory with these variables:
 
 ### Optional Variables
 
-| Variable         | Description                                     | Default     |
-| ---------------- | ----------------------------------------------- | ----------- |
-| PORT             | Server port                                     | 8000        |
-| SQLITE_PATH      | Path to the SQLite database file                | data/messages.db |
-| APP_NAME         | Application name (used in emails)               | OneTimeChat |
-| VERIFY_USERS     | Enable email verification ('true' or 'false')   | false       |
-| SEND_EMAILS      | Enable email sending ('true' or 'false')        | false       |
-| ENABLE_UPLOADS   | Enable image uploads ('true' or 'false')        | false       |
-| SENDGRID_API_KEY | SendGrid API key (required if SEND_EMAILS=true) |             |
-| OLLAMA_HOST      | Ollama server URL — enables AI responses when set | http://localhost:11434 |
-| NODE_ENV         | Environment mode ('production' or 'test')       |             |
+| Variable           | Description                                         | Default                |
+| ------------------ | --------------------------------------------------- | ---------------------- |
+| PORT               | Server port                                         | 8000                   |
+| SQLITE_PATH        | Path to the SQLite database file                    | data/messages.db       |
+| APP_NAME           | Application name (used in emails)                   | Web Messages           |
+| VERIFY_USERS       | Enable email verification ('true' or 'false')       | false                  |
+| SEND_EMAILS        | Enable email sending ('true' or 'false')            | false                  |
+| ENABLE_UPLOADS     | Enable image uploads ('true' or 'false')            | false                  |
+| MAILJET_API_KEY    | Mailjet API key (required if SEND_EMAILS=true)      |                        |
+| MAILJET_API_SECRET | Mailjet API secret (required if SEND_EMAILS=true)   |                        |
+| OLLAMA_HOST        | Ollama server URL — enables AI responses when set   | http://localhost:11434 |
+| NODE_ENV           | Environment mode ('production' or 'test')           |                        |
 
 ## Installation
 
@@ -440,11 +441,11 @@ PORT=8001 npm run dev
 
 ### Email Not Sending
 
-Verify SendGrid configuration:
+Verify Mailjet configuration:
 
 - `SEND_EMAILS=true`
-- `SENDGRID_API_KEY` is set correctly
-- Check SendGrid dashboard for delivery status
+- `MAILJET_API_KEY` and `MAILJET_API_SECRET` are set correctly
+- Check Mailjet dashboard for delivery status
 
 ### Token Errors
 
@@ -487,7 +488,7 @@ For production deployment:
 7. Use process manager (PM2, systemd)
 8. Set up reverse proxy (nginx, Caddy)
 9. Configure rate limiting
-10. Enable SendGrid for email features
+10. Enable Mailjet for email features
 
 ## License
 
