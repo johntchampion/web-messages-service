@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a backend messaging service built with Express.js and TypeScript. It provides REST API endpoints and real-time messaging via Socket.IO. The service supports user authentication, conversations, and messages with a PostgreSQL database backend.
+This is a backend messaging service built with Express.js and TypeScript. It provides REST API endpoints and real-time messaging via Socket.IO. The service supports user authentication, conversations, and messages, stored in a SQLite database file.
 
-This service is designed to work with a separate frontend application (https://github.com/appdevjohn/web-messages) and requires a PostgreSQL database (https://github.com/appdevjohn/web-messages-db).
+This service is designed to work with a separate frontend application (https://github.com/appdevjohn/web-messages). No separate database server is needed: the SQLite database file and its schema are created automatically on first use.
 
 ## Development Commands
 
@@ -42,19 +42,15 @@ npm run test:verbose
 # Build Docker image
 docker build -t messages-service .
 
-# Run container with environment variables
-docker run -p 8000:8000 --env-file .env web-messages-service
+# Run container with environment variables (the volume keeps the SQLite database)
+docker run -p 8000:8000 --env-file .env -v messages-data:/app/data messages-service
 ```
 
 ## Environment Variables
 
 Required environment variables (create a `.env` file in the root):
 
-- `PGUSER` - PostgreSQL database user
-- `PGHOST` - Database host (e.g., localhost)
-- `PGDATABASE` - Database name
-- `PGPASSWORD` - Database password
-- `PGPORT` - Database port (defaults to 5432)
+- `SQLITE_PATH` - Path to the SQLite database file (defaults to `data/messages.db`)
 - `PORT` - Server port (defaults to 8000)
 - `TOKEN_SECRET` - JWT signing secret
 - `APP_BASE_URL` - Frontend application URL for password reset links
@@ -77,7 +73,7 @@ The application follows an MVC-like pattern with separation of concerns:
 - **Controllers** (`src/controllers/`) - Request handlers that orchestrate model operations
 - **Routes** (`src/routes/`) - Express route definitions with validation middleware
 - **Middleware** (`src/middleware/`) - Authentication, authorization, and verification checks
-- **Utils** (`src/util/`) - Database connection, Socket.IO setup, error handling, file uploads, email, and cron jobs
+- **Utils** (`src/util/`) - SQLite connection, Socket.IO setup, error handling, file uploads, email, and cron jobs
 
 ### Entry Point
 
@@ -92,14 +88,24 @@ The application follows an MVC-like pattern with separation of concerns:
 
 ### Database Layer
 
-`src/util/db.ts` exports a single `query()` function that wraps `pg.Pool.query()`. All database operations use this function with parameterized queries to prevent SQL injection.
+`src/util/db.ts` opens the SQLite database (Node's built-in `node:sqlite`) on first use and exports a single `query(sql, params)` function that returns `{ rows, rowCount }`. All database operations use this function with parameterized queries (`?` placeholders, or `?1` when a parameter is reused) to prevent SQL injection.
+
+- Opening the database creates the file's directory, enables `PRAGMA foreign_keys` (required for cascading deletes), WAL mode, and a busy timeout, and applies `database/schema.sql`
+- Every statement in `database/schema.sql` is idempotent (`CREATE ... IF NOT EXISTS`), so it runs on every startup
+- `query()` converts parameters before binding: `Date` → ISO-8601 string, boolean → 1/0, `undefined` → `null`
+- `rowCount` is the number of rows returned for statements that return rows (SELECT or RETURNING), otherwise the number of rows changed
 
 Database schema uses:
 
 - `snake_case` column names (mapped to `camelCase` in TypeScript models)
-- UUIDs for primary keys (`user_id`, `message_id`, `convo_id`)
-- CITEXT type for case-insensitive email/username lookups
-- Database triggers handle `updated_at` timestamps and token timestamp updates
+- UUID text primary keys (`user_id`, `message_id`, `convo_id`), generated in the models with `crypto.randomUUID()`
+- Timestamps stored as ISO-8601 UTC text (same format as `Date#toISOString()`), so they sort and compare correctly as text
+- Booleans stored as 0/1 integers
+- `COLLATE NOCASE` for case-insensitive email/username lookups and uniqueness
+- `CHECK` constraints in place of enums
+- Triggers bump a conversation's `updated_at` when its messages change. `updated_at` on other tables and the token timestamps are set by the models in their own SQL, because SQLite's `RETURNING` does not reflect changes made by `AFTER` triggers
+
+`src/util/column-parsers.ts` converts stored values back to JavaScript types (`parseTimestamp`, `parseNullableTimestamp`, `parseBoolean`) inside each model's `parseRow()`. `src/util/sqlite-errors.ts` recognizes UNIQUE constraint failures.
 
 ### Models
 
@@ -127,6 +133,7 @@ All models follow a consistent pattern:
 **Conversation** (`src/models/conversation.ts`):
 
 - Represents chat conversations
+- `parseRow()` maps DB rows to Conversation objects
 - Auto-deleted after 30 days of inactivity (via cron job)
 - `getDeletionDate()` calculates when conversation will be deleted
 - `findByAge()` queries conversations by age, optionally deleting them
@@ -134,8 +141,8 @@ All models follow a consistent pattern:
 **SystemAgent** (`src/models/system-agent.ts`):
 
 - Represents AI/system agents that can send messages in conversations
-- Stored in `system_agents` table with unique `name` constraint
-- Static methods: `findByName()`, `findOrCreate()` (upsert pattern)
+- Stored in `system_agents` table with unique `model_name` and `display_name` constraints
+- Static methods: `findByModelName()`, `findOrCreate()` (upsert pattern)
 - Referenced by `messages.agent_id` when `sender_type = 'system'`
 
 ### Authentication & Authorization
@@ -264,11 +271,11 @@ Custom `RequestError` class (`src/util/error.ts`) extends Error with HTTP status
 
 ### Database Queries
 
-Always use parameterized queries via the `query()` function. Column names use `snake_case` in the database but are mapped to `camelCase` in TypeScript models via `parseRow()` static methods.
+Always use parameterized queries via the `query()` function. Column names use `snake_case` in the database but are mapped to `camelCase` in TypeScript models via `parseRow()` static methods, which also convert timestamps and booleans using `src/util/column-parsers.ts`. Pass `new Date()` as a parameter instead of using SQL time functions so stored timestamps share one format.
 
 ### Model Updates
 
-Models use partial updates - only fields present in the patch object are updated. The `updated_at` timestamp is automatically managed by database triggers.
+Models use partial updates - only fields present in the patch object are updated. Each `update()` also sets `updated_at`, and setting a verification or reset token sets (or clears) its timestamp.
 
 ### Token Expiry
 
@@ -276,7 +283,7 @@ Models use partial updates - only fields present in the patch object are updated
 - Refresh tokens (JWT): 7 days
 - Email verification codes: 15 minutes
 - Password reset tokens: 1 hour
-- Token timestamp fields (`verify_token_timestamp`, `reset_password_token_timestamp`) are managed by database triggers
+- Token timestamp fields (`verify_token_timestamp`, `reset_password_token_timestamp`) are set by the User model whenever their tokens change
 - Token versioning: User's `tokenVersion` field increments on password change, invalidating all existing access and refresh tokens
 
 ### Testing
@@ -287,7 +294,8 @@ The project uses Jest with ts-jest for unit testing. All tests are located in `s
 
 - `src/__tests__/models/` - Unit tests for User, Message, and Conversation models
 - `src/__tests__/middleware/` - Unit tests for authentication and authorization middleware
-- `src/__tests__/util/` - Unit tests for utility functions like RequestError
+- `src/__tests__/util/` - Unit tests for utility functions like RequestError, plus `db.test.ts`, which runs `query()` against a real in-memory SQLite database
+- `src/__tests__/integration/` - Model tests that run against a real in-memory SQLite database (no mocks)
 - `src/__tests__/helpers/` - Test helper utilities and mock factories
 - `src/__tests__/setup.ts` - Global test setup (runs before all tests)
 
@@ -302,7 +310,7 @@ npm run test:verbose     # Run tests with verbose output
 
 **Test Coverage:**
 
-Current test coverage (131 tests):
+Current test coverage (191 tests; the coverage figures below are from an earlier run):
 
 - Models: 93.77% statement coverage
 - Authentication middleware: 100% coverage
@@ -310,15 +318,15 @@ Current test coverage (131 tests):
 
 **Writing Tests:**
 
-- All tests use Jest's mocking capabilities to avoid database dependencies
-- Database queries are mocked using `jest.mock('../../util/db')`
+- Model unit tests mock database queries using `jest.mock('../../util/db')`
+- `src/__tests__/setup.ts` sets `SQLITE_PATH=:memory:`, so unmocked tests get a fresh in-memory database per test file
 - Use helper functions in `src/__tests__/helpers/db-mock.ts` for creating mock data
 - Tests follow AAA pattern: Arrange, Act, Assert
 - `NODE_ENV=test` is automatically set to prevent emails from being sent
 
 **Test Utilities:**
 
-- `createMockQueryResult<T>(rows, rowCount)` - Creates mock pg QueryResult
+- `createMockQueryResult<T>(rows, rowCount)` - Creates a mock `QueryResult` (`{ rows, rowCount }`)
 - `createMockUserRow(overrides)` - Creates mock user database row
 - `createMockMessageRow(overrides)` - Creates mock message database row
 - `createMockConversationRow(overrides)` - Creates mock conversation database row
@@ -331,7 +339,7 @@ Current test coverage (131 tests):
 
 ### Message Content Validation
 
-Messages have a 4096-byte limit (validated in-memory before database insert to fail fast). Use `Buffer.byteLength()` to match PostgreSQL's `octet_length()` semantics.
+Messages have a 4096-byte limit (validated in-memory before database insert to fail fast). Use `Buffer.byteLength()` to count bytes, matching the schema's `length(CAST(content AS BLOB))` check.
 
 ### Conversation Lifecycle
 

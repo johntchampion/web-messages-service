@@ -165,7 +165,7 @@ describe('Message Model', () => {
 
       expect(result).toBe(true)
       expect(mockQuery).toHaveBeenCalledWith(
-        'SELECT 1 FROM messages WHERE message_id = $1',
+        'SELECT 1 FROM messages WHERE message_id = ?',
         ['message-123']
       )
     })
@@ -263,7 +263,7 @@ describe('Message Model', () => {
       await message.update({})
 
       expect(mockQuery).toHaveBeenCalledWith(
-        'SELECT * FROM messages WHERE message_id = $1',
+        'SELECT * FROM messages WHERE message_id = ?',
         ['message-123']
       )
     })
@@ -287,7 +287,7 @@ describe('Message Model', () => {
 
       expect(message.content).toBe('Reloaded content')
       expect(mockQuery).toHaveBeenCalledWith(
-        'SELECT * FROM messages WHERE message_id = $1',
+        'SELECT * FROM messages WHERE message_id = ?',
         ['message-123']
       )
     })
@@ -334,7 +334,7 @@ describe('Message Model', () => {
       await message.delete()
 
       expect(mockQuery).toHaveBeenCalledWith(
-        'DELETE FROM messages WHERE message_id = $1',
+        'DELETE FROM messages WHERE message_id = ?',
         ['message-123']
       )
     })

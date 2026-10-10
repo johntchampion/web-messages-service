@@ -1,4 +1,6 @@
+import { randomUUID } from 'crypto'
 import query from '../util/db'
+import { parseTimestamp } from '../util/column-parsers'
 
 export interface SystemAgentProps {
   id?: string
@@ -31,7 +33,7 @@ export default class SystemAgent implements SystemAgentProps {
    */
   static async findByModelName(modelName: string): Promise<SystemAgent | null> {
     const res = await query(
-      'SELECT * FROM system_agents WHERE model_name = $1',
+      'SELECT * FROM system_agents WHERE model_name = ?',
       [modelName]
     )
     return res.rowCount ? SystemAgent.parseRow(res.rows[0]) : null
@@ -46,14 +48,25 @@ export default class SystemAgent implements SystemAgentProps {
     avatarUrl?: string | null
   }): Promise<SystemAgent> {
     const sql = `
-      INSERT INTO system_agents (display_name, model_name, avatar_url)
-      VALUES ($1, $2, $3)
+      INSERT INTO system_agents (agent_id, display_name, model_name, avatar_url)
+      VALUES (?, ?, ?, ?)
       ON CONFLICT (model_name) DO UPDATE
         SET display_name = EXCLUDED.display_name,
-            avatar_url = EXCLUDED.avatar_url
+            avatar_url = EXCLUDED.avatar_url,
+            updated_at = CASE
+              WHEN display_name IS NOT EXCLUDED.display_name
+                OR avatar_url IS NOT EXCLUDED.avatar_url
+              THEN EXCLUDED.updated_at
+              ELSE updated_at
+            END
       RETURNING *
     `
-    const params = [props.displayName, props.modelName, props.avatarUrl ?? null]
+    const params = [
+      randomUUID(),
+      props.displayName,
+      props.modelName,
+      props.avatarUrl ?? null,
+    ]
 
     const result = await query(sql, params)
     if (result.rowCount && result.rowCount > 0) {
@@ -71,8 +84,8 @@ export default class SystemAgent implements SystemAgentProps {
       displayName: row['display_name'],
       modelName: row['model_name'],
       avatarUrl: row['avatar_url'],
-      createdAt: row['created_at'],
-      updatedAt: row['updated_at'],
+      createdAt: parseTimestamp(row['created_at']),
+      updatedAt: parseTimestamp(row['updated_at']),
     })
   }
 }

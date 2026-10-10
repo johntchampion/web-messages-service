@@ -1,6 +1,6 @@
 # Web Messages - Backend Service
 
-Express.js backend service providing REST API endpoints and real-time messaging capabilities via Socket.IO. Supports user authentication, conversations, and message management with PostgreSQL database integration.
+Express.js backend service providing REST API endpoints and real-time messaging capabilities via Socket.IO. Supports user authentication, conversations, and message management with a SQLite database.
 
 ## Overview
 
@@ -34,7 +34,7 @@ This backend service provides a complete messaging platform with:
 - **Runtime**: Node.js 24
 - **Framework**: Express.js
 - **Language**: TypeScript
-- **Database**: PostgreSQL (via pg library)
+- **Database**: SQLite (via Node's built-in `node:sqlite`)
 - **Real-time**: Socket.IO
 - **Authentication**: JWT (jsonwebtoken) with bcrypt password hashing
 - **Email**: SendGrid
@@ -46,7 +46,6 @@ This backend service provides a complete messaging platform with:
 ## Prerequisites
 
 - Node.js 24 or higher
-- PostgreSQL database (configured and running)
 - npm or yarn package manager
 - SendGrid API key (optional, for email features)
 
@@ -58,11 +57,6 @@ Create a `.env` file in the root directory with these variables:
 
 | Variable     | Description                                   | Example               |
 | ------------ | --------------------------------------------- | --------------------- |
-| PGUSER       | PostgreSQL database username                  | user                  |
-| PGHOST       | Database host address                         | localhost             |
-| PGDATABASE   | Database name                                 | messages_db           |
-| PGPASSWORD   | Database user password                        | password1             |
-| PGPORT       | Database port                                 | 5432                  |
 | TOKEN_SECRET | JWT signing secret (use strong random string) | your-secret-key-here  |
 | APP_BASE_URL | Frontend application URL for email links      | http://localhost:3000 |
 | BASE_URL     | Backend API URL for image links               | http://localhost:8000 |
@@ -72,6 +66,7 @@ Create a `.env` file in the root directory with these variables:
 | Variable         | Description                                     | Default     |
 | ---------------- | ----------------------------------------------- | ----------- |
 | PORT             | Server port                                     | 8000        |
+| SQLITE_PATH      | Path to the SQLite database file                | data/messages.db |
 | APP_NAME         | Application name (used in emails)               | OneTimeChat |
 | VERIFY_USERS     | Enable email verification ('true' or 'false')   | false       |
 | SEND_EMAILS      | Enable email sending ('true' or 'false')        | false       |
@@ -87,6 +82,8 @@ Install dependencies:
 ```bash
 npm install
 ```
+
+There is no database server to set up. The SQLite database file (`data/messages.db` by default) and its schema (`database/schema.sql`) are created automatically the first time the service runs.
 
 ## Running the Application
 
@@ -112,20 +109,6 @@ npm run build
 npm start
 ```
 
-### Development with Docker
-
-Build the development Docker image:
-
-```bash
-docker build -f Dockerfile.dev -t messages-service-dev .
-```
-
-Run the development container:
-
-```bash
-docker run -p 8000:8000 --env-file .env messages-service-dev
-```
-
 ### Production with Docker
 
 Build the production Docker image:
@@ -137,8 +120,10 @@ docker build -t messages-service .
 Run the production container:
 
 ```bash
-docker run -p 8000:8000 --env-file .env messages-service
+docker run -p 8000:8000 --env-file .env -v messages-data:/app/data messages-service
 ```
+
+The volume keeps the SQLite database at `/app/data` across container restarts.
 
 ## API Endpoints
 
@@ -387,7 +372,7 @@ npm run test:verbose
 
 Test coverage:
 
-- 131+ tests
+- 191 tests, including integration tests that run the models against an in-memory SQLite database
 - 93.77% statement coverage for models
 - 100% coverage for authentication middleware
 
@@ -402,6 +387,8 @@ src/
 ├── util/              # Database, Socket.IO, error handling, cron jobs
 ├── __tests__/         # Jest test files
 └── index.ts           # Application entry point
+database/
+└── schema.sql         # SQLite schema, applied at startup
 ```
 
 ## Authentication Flow
@@ -433,17 +420,15 @@ A cron job runs hourly to delete conversations inactive for 30+ days:
 
 ## Troubleshooting
 
-### Database Connection Errors
+### Database Errors
 
-Check database configuration:
+Check that the directory in `SQLITE_PATH` (default `data/`) is writable by the service. To inspect the database:
 
 ```bash
-# Verify database is running
-psql -U $PGUSER -h $PGHOST -d $PGDATABASE -c "SELECT version();"
-
-# Check environment variables
-echo $PGHOST $PGUSER $PGDATABASE
+sqlite3 data/messages.db ".tables"
 ```
+
+To start over with an empty database, stop the service and delete `data/messages.db` along with its `-wal` and `-shm` files.
 
 ### Port Already in Use
 
@@ -483,6 +468,7 @@ Verify configuration:
 - Compiled JavaScript output goes to `dist/`
 - Use `npm run dev` for development with auto-restart
 - Database uses `snake_case`, models use `camelCase`
+- Timestamps are stored as ISO-8601 UTC text and booleans as 0/1; models convert them in `parseRow()`
 - Message content limited to 4096 bytes
 - Access tokens expire in 1 hour, refresh tokens in 7 days
 - Email verification codes expire in 15 minutes
@@ -493,11 +479,11 @@ Verify configuration:
 For production deployment:
 
 1. Set `NODE_ENV=production`
-2. Use strong values for `TOKEN_SECRET` and database passwords
+2. Use a strong value for `TOKEN_SECRET`
 3. Configure CORS for your domain
 4. Enable SSL/TLS
 5. Set up proper logging and monitoring
-6. Configure database backups
+6. Back up the SQLite database file (e.g. `sqlite3 data/messages.db ".backup backup.db"`)
 7. Use process manager (PM2, systemd)
 8. Set up reverse proxy (nginx, Caddy)
 9. Configure rate limiting

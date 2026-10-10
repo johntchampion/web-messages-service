@@ -32,8 +32,8 @@ CLAUDE.md
 *.swo
 *~
 
-# Database image build context (built separately via docker-compose)
-database
+# Local SQLite database files
+data
 
 # TypeScript
 tsconfig.test.json

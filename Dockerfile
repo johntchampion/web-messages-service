@@ -33,10 +33,17 @@ RUN npm ci --only=production && \
 # Copy built application from builder stage
 COPY --from=builder /app/dist ./dist
 
-# Create non-root user change ownership of the app
+# Database schema, applied at startup
+COPY database ./database
+
+# Create non-root user, the SQLite data directory, and change ownership of the app
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001 && \
+    mkdir -p /app/data && \
     chown -R nodejs:nodejs /app
+
+# Persist the SQLite database outside the container
+VOLUME /app/data
 
 # Switch to non-root user
 USER nodejs

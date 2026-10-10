@@ -63,9 +63,8 @@ describe('User Model', () => {
     })
 
     it('should throw error when email is already in use', async () => {
-      const dbError: any = new Error('Unique constraint violation')
-      dbError.code = '23505'
-      dbError.detail = 'Key (email)=(test@example.com) already exists.'
+      const dbError: any = new Error('UNIQUE constraint failed: users.email')
+      dbError.errcode = 2067
 
       mockQuery.mockRejectedValue(dbError)
 
@@ -79,9 +78,8 @@ describe('User Model', () => {
     })
 
     it('should throw error when username is already in use', async () => {
-      const dbError: any = new Error('Unique constraint violation')
-      dbError.code = '23505'
-      dbError.detail = 'Key (username)=(testuser) already exists.'
+      const dbError: any = new Error('UNIQUE constraint failed: users.username')
+      dbError.errcode = 2067
 
       mockQuery.mockRejectedValue(dbError)
 
@@ -116,7 +114,7 @@ describe('User Model', () => {
 
       expect(result).toBe(true)
       expect(mockQuery).toHaveBeenCalledWith(
-        'SELECT 1 FROM users WHERE user_id = $1',
+        'SELECT 1 FROM users WHERE user_id = ?',
         ['test-user-id']
       )
     })
@@ -181,7 +179,7 @@ describe('User Model', () => {
       await user.update({})
 
       expect(mockQuery).toHaveBeenCalledWith(
-        'SELECT * FROM users WHERE user_id = $1',
+        'SELECT * FROM users WHERE user_id = ?',
         ['test-user-id']
       )
     })
@@ -199,7 +197,7 @@ describe('User Model', () => {
 
       expect(user.displayName).toBe('Reloaded Name')
       expect(mockQuery).toHaveBeenCalledWith(
-        'SELECT * FROM users WHERE user_id = $1',
+        'SELECT * FROM users WHERE user_id = ?',
         ['test-user-id']
       )
     })
@@ -229,7 +227,7 @@ describe('User Model', () => {
       await user.delete()
 
       expect(mockQuery).toHaveBeenCalledWith(
-        'DELETE FROM users WHERE user_id = $1',
+        'DELETE FROM users WHERE user_id = ?',
         ['test-user-id']
       )
     })
@@ -460,7 +458,7 @@ describe('User Model', () => {
 
         expect(result).toBe(true)
         expect(mockQuery).toHaveBeenCalledWith(
-          'SELECT 1 FROM users WHERE email = $1',
+          'SELECT 1 FROM users WHERE email = ?',
           ['test@example.com']
         )
       })
@@ -482,7 +480,7 @@ describe('User Model', () => {
 
         expect(result).toBe(true)
         expect(mockQuery).toHaveBeenCalledWith(
-          'SELECT 1 FROM users WHERE username = $1',
+          'SELECT 1 FROM users WHERE username = ?',
           ['testuser']
         )
       })

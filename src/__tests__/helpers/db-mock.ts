@@ -1,18 +1,15 @@
-import { QueryResult, QueryResultRow } from 'pg'
+import { QueryResult } from '../../util/db'
 
 /**
  * Mock query results for testing
  */
-export const createMockQueryResult = <T extends QueryResultRow = any>(
+export const createMockQueryResult = <T = any>(
   rows: T[] = [],
   rowCount: number | null = null
 ): QueryResult<T> => {
   return {
     rows,
     rowCount: rowCount !== null ? rowCount : rows.length,
-    command: '',
-    oid: 0,
-    fields: [],
   }
 }
 

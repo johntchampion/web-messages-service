@@ -12,11 +12,14 @@ export const deleteConversations = async () => {
  * Permanently removes refresh token sessions that have been expired for 14 days.
  */
 export const deleteExpiredRefreshTokens = async () => {
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - 14)
+
   await query(
     `
       DELETE FROM sessions
-      WHERE expires_at < NOW() - INTERVAL '14 days'
+      WHERE expires_at < ?
     `,
-    []
+    [cutoff]
   )
 }

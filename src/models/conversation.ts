@@ -1,4 +1,6 @@
+import { randomUUID } from 'crypto'
 import query from '../util/db'
+import { parseNullableTimestamp, parseTimestamp } from '../util/column-parsers'
 import isUUID from '../util/uuid'
 
 const EXPIRY_DAYS = 30
@@ -34,21 +36,22 @@ class Conversation {
     let result
     if (this.id) {
       result = await query(
-        'UPDATE conversations SET name = $1, creator_id = $2 WHERE convo_id = $3 RETURNING *;',
-        [this.name, this.creatorId, this.id],
+        'UPDATE conversations SET name = ?, creator_id = ?, updated_at = ? WHERE convo_id = ? RETURNING *;',
+        [this.name, this.creatorId, new Date(), this.id],
       )
     } else {
       result = await query(
-        'INSERT INTO conversations (name, creator_id) VALUES ($1, $2) RETURNING *;',
-        [this.name, this.creatorId],
+        'INSERT INTO conversations (convo_id, name, creator_id) VALUES (?, ?, ?) RETURNING *;',
+        [randomUUID(), this.name, this.creatorId],
       )
     }
 
-    this.name = result.rows[0]['name']
-    this.createdAt = result.rows[0]['created_at']
-    this.updatedAt = result.rows[0]['updated_at']
-    this.id = result.rows[0]['convo_id']
-    this.creatorId = result.rows[0]['creator_id']
+    const saved = Conversation.parseRow(result.rows[0])
+    this.name = saved.name
+    this.createdAt = saved.createdAt
+    this.updatedAt = saved.updatedAt
+    this.id = saved.id
+    this.creatorId = saved.creatorId
 
     return
   }
@@ -60,7 +63,7 @@ class Conversation {
     if (!this.id) return
     await query(
       `
-      DELETE FROM conversations WHERE convo_id = $1 RETURNING convo_id;
+      DELETE FROM conversations WHERE convo_id = ? RETURNING convo_id;
       `,
       [this.id],
     )
@@ -91,19 +94,12 @@ class Conversation {
     }
 
     const dbConversations = await query(
-      'SELECT * FROM conversations WHERE convo_id = $1;',
+      'SELECT * FROM conversations WHERE convo_id = ?;',
       [id],
     )
 
     if (dbConversations?.rowCount && dbConversations.rowCount > 0) {
-      const conversation = new Conversation({
-        createdAt: dbConversations.rows[0]['created_at'],
-        updatedAt: dbConversations.rows[0]['updated_at'],
-        name: dbConversations.rows[0]['name'],
-        id: dbConversations.rows[0]['convo_id'],
-        creatorId: dbConversations.rows[0]['creator_id'],
-      })
-      return conversation
+      return Conversation.parseRow(dbConversations.rows[0])
     } else {
       throw new Error('There is no conversation with that ID.')
     }
@@ -116,21 +112,11 @@ class Conversation {
    */
   static findByUserId = async (userId: string): Promise<Conversation[]> => {
     const dbConversations = await query(
-      'SELECT * FROM conversations WHERE creator_id = $1 ORDER BY updated_at DESC;',
+      'SELECT * FROM conversations WHERE creator_id = ? ORDER BY updated_at DESC;',
       [userId],
     )
 
-    const conversations = dbConversations.rows.map((c) => {
-      return new Conversation({
-        createdAt: c['created_at'],
-        updatedAt: c['updated_at'],
-        name: c['name'],
-        id: c['convo_id'],
-        creatorId: c['creator_id'],
-      })
-    })
-
-    return conversations
+    return dbConversations.rows.map(Conversation.parseRow)
   }
 
   /**
@@ -147,11 +133,11 @@ class Conversation {
       `
         SELECT DISTINCT convo_id
         FROM messages
-        WHERE sender_id = $1
+        WHERE sender_id = ?1
         UNION
         SELECT convo_id
         FROM conversations
-        WHERE creator_id = $1;
+        WHERE creator_id = ?1;
       `,
       [userId],
     )
@@ -170,9 +156,9 @@ class Conversation {
   ): Promise<void> => {
     await query(
       `INSERT INTO conversation_visits (user_id, convo_id, visited_at)
-       VALUES ($1, $2, NOW())
-       ON CONFLICT (user_id, convo_id) DO UPDATE SET visited_at = NOW();`,
-      [userId, convoId],
+       VALUES (?, ?, ?)
+       ON CONFLICT (user_id, convo_id) DO UPDATE SET visited_at = excluded.visited_at;`,
+      [userId, convoId, new Date()],
     )
   }
 
@@ -187,7 +173,7 @@ class Conversation {
     convoId: string,
   ): Promise<boolean> => {
     const result = await query(
-      'DELETE FROM conversation_visits WHERE user_id = $1 AND convo_id = $2;',
+      'DELETE FROM conversation_visits WHERE user_id = ? AND convo_id = ?;',
       [userId, convoId],
     )
     return (result.rowCount ?? 0) > 0
@@ -206,24 +192,16 @@ class Conversation {
     const sql = ownedOnly
       ? `SELECT c.* FROM conversations c
          INNER JOIN conversation_visits cv ON c.convo_id = cv.convo_id
-         WHERE cv.user_id = $1 AND c.creator_id = $1
+         WHERE cv.user_id = ?1 AND c.creator_id = ?1
          ORDER BY cv.visited_at DESC;`
       : `SELECT c.* FROM conversations c
          INNER JOIN conversation_visits cv ON c.convo_id = cv.convo_id
-         WHERE cv.user_id = $1
+         WHERE cv.user_id = ?1
          ORDER BY cv.visited_at DESC;`
 
     const dbConversations = await query(sql, [userId])
 
-    return dbConversations.rows.map((c) => {
-      return new Conversation({
-        createdAt: c['created_at'],
-        updatedAt: c['updated_at'],
-        name: c['name'],
-        id: c['convo_id'],
-        creatorId: c['creator_id'],
-      })
-    })
+    return dbConversations.rows.map(Conversation.parseRow)
   }
 
   /**
@@ -240,27 +218,18 @@ class Conversation {
     const sql = ownedOnly
       ? `SELECT c.*, cv.visited_at
          FROM conversations c
-         LEFT JOIN conversation_visits cv ON c.convo_id = cv.convo_id AND cv.user_id = $1
-         WHERE c.creator_id = $1
+         LEFT JOIN conversation_visits cv ON c.convo_id = cv.convo_id AND cv.user_id = ?1
+         WHERE c.creator_id = ?1
          ORDER BY cv.visited_at DESC NULLS LAST, c.updated_at DESC;`
       : `SELECT c.*, cv.visited_at
          FROM conversations c
-         LEFT JOIN conversation_visits cv ON c.convo_id = cv.convo_id AND cv.user_id = $1
-         WHERE cv.user_id = $1 OR c.creator_id = $1
+         LEFT JOIN conversation_visits cv ON c.convo_id = cv.convo_id AND cv.user_id = ?1
+         WHERE cv.user_id = ?1 OR c.creator_id = ?1
          ORDER BY cv.visited_at DESC NULLS LAST, c.updated_at DESC;`
 
     const dbConversations = await query(sql, [userId])
 
-    return dbConversations.rows.map((c) => {
-      return new Conversation({
-        createdAt: c['created_at'],
-        updatedAt: c['updated_at'],
-        name: c['name'],
-        id: c['convo_id'],
-        creatorId: c['creator_id'],
-        visitedAt: c['visited_at'],
-      })
-    })
+    return dbConversations.rows.map(Conversation.parseRow)
   }
 
   /**
@@ -277,30 +246,37 @@ class Conversation {
     date.setDate(date.getDate() - daysOld)
 
     const dbConversations = await query(
-      'SELECT * FROM conversations WHERE updated_at < $1;',
+      'SELECT * FROM conversations WHERE updated_at < ?;',
       [`${date.toISOString().split('T')[0]}`],
     )
 
     if (shouldDelete) {
       await query(
         `
-        DELETE FROM conversations WHERE updated_at < $1 RETURNING convo_id;
+        DELETE FROM conversations WHERE updated_at < ? RETURNING convo_id;
         `,
         [`${date.toISOString().split('T')[0]}`],
       )
     }
 
-    const conversations = dbConversations.rows.map((c) => {
-      return new Conversation({
-        createdAt: c['created_at'],
-        updatedAt: c['updated_at'],
-        name: c['name'],
-        id: c['convo_id'],
-        creatorId: c['creator_id'],
-      })
-    })
+    return dbConversations.rows.map(Conversation.parseRow)
+  }
 
-    return conversations
+  /**
+   * Maps a DB row to a Conversation object.
+   */
+  static parseRow(row: any): Conversation {
+    return new Conversation({
+      createdAt: parseTimestamp(row['created_at']),
+      updatedAt: parseTimestamp(row['updated_at']),
+      name: row['name'],
+      id: row['convo_id'],
+      creatorId: row['creator_id'],
+      visitedAt:
+        'visited_at' in row
+          ? parseNullableTimestamp(row['visited_at'])
+          : undefined,
+    })
   }
 }
 

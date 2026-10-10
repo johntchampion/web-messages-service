@@ -1,4 +1,6 @@
+import { randomUUID } from 'crypto'
 import query from '../util/db'
+import { parseTimestamp } from '../util/column-parsers'
 import isUUID from '../util/uuid'
 
 export type ContentType = 'text' | 'image'
@@ -86,13 +88,14 @@ export default class Message implements MessageProps {
 
     const sql = `
       INSERT INTO messages (
-        convo_id, sender_id, type, content, sender_name, sender_avatar,
-        sender_type, agent_id
+        message_id, convo_id, sender_id, type, content, sender_name,
+        sender_avatar, sender_type, agent_id
       )
-      VALUES ($1, $2, $3::content_type, $4, $5, $6, $7::message_sender_type, $8)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       RETURNING *
     `
     const params = [
+      randomUUID(),
       this.convoId,
       this.senderId ?? null,
       this.type,
@@ -121,7 +124,7 @@ export default class Message implements MessageProps {
    */
   async isCreated(): Promise<boolean> {
     if (!this.id) return false
-    const r = await query('SELECT 1 FROM messages WHERE message_id = $1', [
+    const r = await query('SELECT 1 FROM messages WHERE message_id = ?', [
       this.id,
     ])
     return !!r.rowCount
@@ -129,7 +132,6 @@ export default class Message implements MessageProps {
 
   /**
    * Partial update. Pass only fields you want to change.
-   * `updated_at` is handled by trigger in DB.
    */
   async update(patch: MessagePatch = {}): Promise<Message> {
     if (!this.id) throw new Error('Message has not been persisted yet.')
@@ -140,7 +142,7 @@ export default class Message implements MessageProps {
     const values: any[] = []
     const push = (sqlFragment: string, v: any) => {
       values.push(v)
-      sets.push(`${sqlFragment} = $${values.length}`)
+      sets.push(`${sqlFragment} = ?`)
     }
 
     if ('convoId' in patch) push('convo_id', patch.convoId)
@@ -155,9 +157,8 @@ export default class Message implements MessageProps {
 
     if (sets.length === 0) return this.reload()
 
-    const sql = `UPDATE messages SET ${sets.join(', ')} WHERE message_id = $${
-      values.length + 1
-    } RETURNING *`
+    push('updated_at', new Date())
+    const sql = `UPDATE messages SET ${sets.join(', ')} WHERE message_id = ? RETURNING *`
     values.push(this.id)
 
     const result = await query(sql, values)
@@ -173,7 +174,7 @@ export default class Message implements MessageProps {
    */
   async reload(): Promise<Message> {
     if (!this.id) throw new Error('Message has not been persisted yet.')
-    const res = await query('SELECT * FROM messages WHERE message_id = $1', [
+    const res = await query('SELECT * FROM messages WHERE message_id = ?', [
       this.id,
     ])
     if (!res.rowCount) throw new Error('Could not reload message.')
@@ -186,7 +187,7 @@ export default class Message implements MessageProps {
    */
   async delete(): Promise<Message> {
     if (!this.id) throw new Error('This user does not exist.')
-    await query('DELETE FROM messages WHERE message_id = $1', [this.id])
+    await query('DELETE FROM messages WHERE message_id = ?', [this.id])
     return this
   }
 
@@ -199,7 +200,7 @@ export default class Message implements MessageProps {
       return null
     }
 
-    const res = await query('SELECT * FROM messages WHERE message_id = $1', [
+    const res = await query('SELECT * FROM messages WHERE message_id = ?', [
       id,
     ])
     return res.rowCount ? Message.parseRow(res.rows[0]) : null
@@ -230,23 +231,18 @@ export default class Message implements MessageProps {
     const order = opts.order ?? 'asc'
 
     // Build cursor predicates using a (created_at, message_id) composite to break ties
-    const whereParts = ['m.convo_id = $1']
+    const whereParts = ['m.convo_id = ?']
     const params: any[] = [convoId]
-    let paramIdx = params.length
 
     if (opts.before) {
       // strictly older than the tuple
-      whereParts.push(
-        `(m.created_at, m.message_id) < ($${++paramIdx}, $${++paramIdx}::uuid)`,
-      )
-      params.push(opts.before.createdAt, opts.before.id)
+      whereParts.push('(m.created_at, m.message_id) < (?, ?)')
+      params.push(new Date(opts.before.createdAt), opts.before.id)
     }
     if (opts.after) {
       // strictly newer than the tuple
-      whereParts.push(
-        `(m.created_at, m.message_id) > ($${++paramIdx}, $${++paramIdx}::uuid)`,
-      )
-      params.push(opts.after.createdAt, opts.after.id)
+      whereParts.push('(m.created_at, m.message_id) > (?, ?)')
+      params.push(new Date(opts.after.createdAt), opts.after.id)
     }
 
     const sql = `
@@ -254,7 +250,7 @@ export default class Message implements MessageProps {
       FROM messages m
       WHERE ${whereParts.join(' AND ')}
       ORDER BY m.created_at ${order}, m.message_id ${order}
-      LIMIT $${++paramIdx}
+      LIMIT ?
     `
     params.push(limit + 1) // fetch one extra to decide hasMore
 
@@ -292,8 +288,8 @@ export default class Message implements MessageProps {
   static parseRow(row: any): Message {
     return new Message({
       id: row['message_id'],
-      createdAt: row['created_at'],
-      updatedAt: row['updated_at'],
+      createdAt: parseTimestamp(row['created_at']),
+      updatedAt: parseTimestamp(row['updated_at']),
       convoId: row['convo_id'],
       senderId: row['sender_id'],
       type: row['type'],
@@ -311,11 +307,11 @@ function clamp(n: number, min: number, max: number) {
 }
 
 /**
- * Mirror DB CHECK (octet_length(content) <= 4096)
+ * Mirror DB CHECK (length(CAST(content AS BLOB)) <= 4096)
  * so we fail fast before sending to DB.
  */
 function validateContentLength(content: string) {
-  // Use Buffer.byteLength to match octet_length semantics
+  // Use Buffer.byteLength to count bytes, matching the DB check
   const bytes = Buffer.byteLength(content ?? '', 'utf8')
   if (bytes > 4096) {
     throw new Error(`Message content exceeds 4096 bytes (got ${bytes}).`)

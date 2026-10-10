@@ -3,3 +3,4 @@
 process.env.NODE_ENV = 'test'
 process.env.TOKEN_SECRET = 'test-secret-key-for-jwt-testing'
 process.env.APP_BASE_URL = 'http://localhost:3000'
+process.env.SQLITE_PATH = ':memory:'

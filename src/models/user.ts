@@ -1,13 +1,19 @@
 import bcrypt from 'bcryptjs'
-import crypto from 'crypto'
+import crypto, { randomUUID } from 'crypto'
 import jwt from 'jsonwebtoken'
 import query from '../util/db'
+import {
+  parseBoolean,
+  parseNullableTimestamp,
+  parseTimestamp,
+} from '../util/column-parsers'
 import sendEmail from '../util/mail'
+import { isUniqueConstraintViolation } from '../util/sqlite-errors'
 import isUUID from '../util/uuid'
 
 /**
  * Mirrors DB columns; everything optional so we can do partial updates safely.
- * Note: email & username are CITEXT in DB (case-insensitive).
+ * Note: email & username are case-insensitive (COLLATE NOCASE) in DB.
  */
 export interface Account {
   createdAt?: Date
@@ -76,18 +82,21 @@ export default class User implements Account {
   // ---------- CRUD ----------
 
   /**
-   * Creates a user. Token timestamps are managed by DB triggers.
+   * Creates a user. Token timestamps are set for any tokens provided.
    */
   async create(): Promise<User> {
     const sql = `
       INSERT INTO users (
-        display_name, username, email, profile_pic_url,
-        hashed_password, verified, verify_token, reset_password_token
+        user_id, display_name, username, email, profile_pic_url,
+        hashed_password, verified, verify_token, verify_token_timestamp,
+        reset_password_token, reset_password_token_timestamp
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)
       RETURNING *
     `
+    const now = new Date()
     const params = [
+      randomUUID(),
       this.displayName,
       this.username,
       this.email ?? null,
@@ -95,7 +104,9 @@ export default class User implements Account {
       this.hashedPassword,
       this.verified ?? false,
       this.verifyToken ?? null,
+      this.verifyToken ? now : null,
       this.resetPasswordToken ?? null,
+      this.resetPasswordToken ? now : null,
     ]
 
     try {
@@ -105,15 +116,12 @@ export default class User implements Account {
         return this
       }
       throw new Error('Insert returned no rows')
-    } catch (err: any) {
-      // Unique constraint violations (23505): email/username
-      if (err?.code === '23505') {
-        if (String(err.detail || '').includes('(email)')) {
-          throw new Error('Email already in use.')
-        }
-        if (String(err.detail || '').includes('(username)')) {
-          throw new Error('Username already in use.')
-        }
+    } catch (err) {
+      if (isUniqueConstraintViolation(err, 'users.email')) {
+        throw new Error('Email already in use.')
+      }
+      if (isUniqueConstraintViolation(err, 'users.username')) {
+        throw new Error('Username already in use.')
       }
       throw err
     }
@@ -124,22 +132,23 @@ export default class User implements Account {
    */
   async isCreated(): Promise<boolean> {
     if (!this.id) return false
-    const r = await query('SELECT 1 FROM users WHERE user_id = $1', [this.id])
+    const r = await query('SELECT 1 FROM users WHERE user_id = ?', [this.id])
     return !!r.rowCount
   }
 
   /**
    * Partial update. Pass only fields you want to change.
-   * `updated_at` is handled by trigger in DB.
+   * Token timestamps are set or cleared along with their tokens.
    */
   async update(patch: AccountPatch = {}): Promise<User> {
     if (!this.id) throw new Error('User has not been persisted yet.')
 
+    const now = new Date()
     const sets: string[] = []
     const values: any[] = []
     const push = (sqlFragment: string, v: any) => {
       values.push(v)
-      sets.push(`${sqlFragment} = $${values.length}`)
+      sets.push(`${sqlFragment} = ?`)
     }
 
     if ('displayName' in patch) push('display_name', patch.displayName)
@@ -150,16 +159,23 @@ export default class User implements Account {
     if ('hashedPassword' in patch) push('hashed_password', patch.hashedPassword)
     if ('tokenVersion' in patch) push('token_version', patch.tokenVersion)
     if ('verified' in patch) push('verified', patch.verified)
-    if ('verifyToken' in patch) push('verify_token', patch.verifyToken ?? null)
-    if ('resetPasswordToken' in patch)
+    if ('verifyToken' in patch) {
+      push('verify_token', patch.verifyToken ?? null)
+      push('verify_token_timestamp', patch.verifyToken ? now : null)
+    }
+    if ('resetPasswordToken' in patch) {
       push('reset_password_token', patch.resetPasswordToken ?? null)
+      push(
+        'reset_password_token_timestamp',
+        patch.resetPasswordToken ? now : null,
+      )
+    }
     if ('disabled' in patch) push('disabled', patch.disabled ?? null)
 
     if (sets.length === 0) return this.reload()
 
-    const sql = `UPDATE users SET ${sets.join(', ')} WHERE user_id = $${
-      values.length + 1
-    } RETURNING *`
+    push('updated_at', now)
+    const sql = `UPDATE users SET ${sets.join(', ')} WHERE user_id = ? RETURNING *`
     values.push(this.id)
 
     const result = await query(sql, values)
@@ -175,7 +191,7 @@ export default class User implements Account {
    */
   async reload(): Promise<User> {
     if (!this.id) throw new Error('User has not been persisted yet.')
-    const res = await query('SELECT * FROM users WHERE user_id = $1', [this.id])
+    const res = await query('SELECT * FROM users WHERE user_id = ?', [this.id])
     if (!res.rowCount) throw new Error('Could not reload user.')
     Object.assign(this, User.parseRow(res.rows[0]))
     return this
@@ -186,7 +202,7 @@ export default class User implements Account {
    */
   async delete(): Promise<User> {
     if (!this.id) throw new Error('This user does not exist.')
-    await query('DELETE FROM users WHERE user_id = $1', [this.id])
+    await query('DELETE FROM users WHERE user_id = ?', [this.id])
     return this
   }
 
@@ -258,11 +274,12 @@ export default class User implements Account {
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
 
     const sql = `
-      INSERT INTO sessions (user_id, rt_hash, user_agent, ip, expires_at)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO sessions (session_id, user_id, rt_hash, user_agent, ip, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?)
       RETURNING session_id
     `
     const result = await query(sql, [
+      randomUUID(),
       userId,
       rtHash,
       userAgent ?? null,
@@ -325,10 +342,10 @@ export default class User implements Account {
       // Check if session exists and is not revoked
       const sessionResult = await query(
         `SELECT * FROM sessions
-         WHERE rt_hash = $1
+         WHERE rt_hash = ?
            AND revoked_at IS NULL
-           AND expires_at > NOW()`,
-        [rtHash],
+           AND expires_at > ?`,
+        [rtHash, new Date()],
       )
 
       if (!sessionResult.rowCount) return null
@@ -358,7 +375,8 @@ export default class User implements Account {
       .update(refreshToken)
       .digest('hex')
 
-    await query('UPDATE sessions SET revoked_at = NOW() WHERE rt_hash = $1', [
+    await query('UPDATE sessions SET revoked_at = ? WHERE rt_hash = ?', [
+      new Date(),
       rtHash,
     ])
   }
@@ -375,7 +393,8 @@ export default class User implements Account {
     await this.update({ tokenVersion: newVersion })
 
     // Revoke all refresh tokens
-    await query('UPDATE sessions SET revoked_at = NOW() WHERE user_id = $1', [
+    await query('UPDATE sessions SET revoked_at = ? WHERE user_id = ?', [
+      new Date(),
       this.id,
     ])
   }
@@ -428,7 +447,7 @@ export default class User implements Account {
   }
 
   /**
-   * Starts password reset by setting a token (timestamp is handled by DB trigger).
+   * Starts password reset by setting a token and its timestamp.
    */
   async beginPasswordReset(): Promise<User> {
     if (!this.id) throw new Error('User is not yet saved to the database.')
@@ -521,12 +540,12 @@ export default class User implements Account {
   // ---------- Lookups ----------
 
   static async accountWithEmailExists(email: string): Promise<boolean> {
-    const r = await query('SELECT 1 FROM users WHERE email = $1', [email])
+    const r = await query('SELECT 1 FROM users WHERE email = ?', [email])
     return !!r.rowCount
   }
 
   static async accountWithUsernameExists(username: string): Promise<boolean> {
-    const r = await query('SELECT 1 FROM users WHERE username = $1', [username])
+    const r = await query('SELECT 1 FROM users WHERE username = ?', [username])
     return !!r.rowCount
   }
 
@@ -536,24 +555,24 @@ export default class User implements Account {
       return null
     }
 
-    const r = await query('SELECT * FROM users WHERE user_id = $1', [id])
+    const r = await query('SELECT * FROM users WHERE user_id = ?', [id])
     return r.rowCount ? User.parseRow(r.rows[0]) : null
   }
 
   static async findByEmail(email: string): Promise<User | null> {
-    // CITEXT means case-insensitive by default
-    const r = await query('SELECT * FROM users WHERE email = $1', [email])
+    // COLLATE NOCASE on the column makes this case-insensitive
+    const r = await query('SELECT * FROM users WHERE email = ?', [email])
     return r.rowCount ? User.parseRow(r.rows[0]) : null
   }
 
   static async findByUsername(username: string): Promise<User | null> {
-    const r = await query('SELECT * FROM users WHERE username = $1', [username])
+    const r = await query('SELECT * FROM users WHERE username = ?', [username])
     return r.rowCount ? User.parseRow(r.rows[0]) : null
   }
 
   static async findByResetPasswordToken(token: string): Promise<User | null> {
     const r = await query(
-      'SELECT * FROM users WHERE reset_password_token = $1',
+      'SELECT * FROM users WHERE reset_password_token = ?',
       [token],
     )
     return r.rowCount ? User.parseRow(r.rows[0]) : null
@@ -563,21 +582,25 @@ export default class User implements Account {
 
   static parseRow(row: any): User {
     return new User({
-      createdAt: row['created_at'],
-      updatedAt: row['updated_at'],
+      createdAt: parseTimestamp(row['created_at']),
+      updatedAt: parseTimestamp(row['updated_at']),
       displayName: row['display_name'],
       username: row['username'],
       email: row['email'],
       profilePicURL: row['profile_pic_url'],
       hashedPassword: row['hashed_password'],
-      passwordChangedAt: row['password_changed_at'],
+      passwordChangedAt: parseTimestamp(row['password_changed_at']),
       tokenVersion: row['token_version'],
-      verified: row['verified'],
+      verified: parseBoolean(row['verified']),
       verifyToken: row['verify_token'],
-      verifyTokenTimestamp: row['verify_token_timestamp'],
+      verifyTokenTimestamp: parseNullableTimestamp(
+        row['verify_token_timestamp'],
+      ),
       resetPasswordToken: row['reset_password_token'],
-      resetPasswordTokenTimestamp: row['reset_password_token_timestamp'],
-      disabled: row['disabled'],
+      resetPasswordTokenTimestamp: parseNullableTimestamp(
+        row['reset_password_token_timestamp'],
+      ),
+      disabled: parseBoolean(row['disabled']),
       id: row['user_id'],
     })
   }

@@ -49,7 +49,7 @@ describe('SystemAgent Model', () => {
       const agent = await SystemAgent.findByModelName('gemma4')
 
       expect(mockQuery).toHaveBeenCalledWith(
-        'SELECT * FROM system_agents WHERE model_name = $1',
+        'SELECT * FROM system_agents WHERE model_name = ?',
         ['gemma4']
       )
       expect(agent).not.toBeNull()
@@ -79,7 +79,7 @@ describe('SystemAgent Model', () => {
       expect(mockQuery).toHaveBeenCalledTimes(1)
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('ON CONFLICT (model_name)'),
-        ['Gemma', 'gemma4', null]
+        [expect.any(String), 'Gemma', 'gemma4', null]
       )
       expect(agent.modelName).toBe('gemma4')
     })
@@ -96,7 +96,7 @@ describe('SystemAgent Model', () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO system_agents'),
-        ['Gemma', 'gemma4', 'http://example.com/avatar.png']
+        [expect.any(String), 'Gemma', 'gemma4', 'http://example.com/avatar.png']
       )
       expect(agent.avatarUrl).toBe('http://example.com/avatar.png')
     })

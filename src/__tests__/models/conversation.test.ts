@@ -8,6 +8,8 @@ import {
 jest.mock('../../util/db')
 
 const mockQuery = query as jest.MockedFunction<typeof query>
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 describe('Conversation Model', () => {
   beforeEach(() => {
@@ -59,8 +61,8 @@ describe('Conversation Model', () => {
       await conversation.update()
 
       expect(mockQuery).toHaveBeenCalledWith(
-        'INSERT INTO conversations (name, creator_id) VALUES ($1, $2) RETURNING *;',
-        ['New Conversation', undefined]
+        'INSERT INTO conversations (convo_id, name, creator_id) VALUES (?, ?, ?) RETURNING *;',
+        [expect.stringMatching(UUID_PATTERN), 'New Conversation', undefined]
       )
       expect(conversation.id).toBe('770e8400-e29b-41d4-a716-446655440002')
       expect(conversation.createdAt).toBeDefined()
@@ -82,8 +84,8 @@ describe('Conversation Model', () => {
       await conversation.update()
 
       expect(mockQuery).toHaveBeenCalledWith(
-        'UPDATE conversations SET name = $1, creator_id = $2 WHERE convo_id = $3 RETURNING *;',
-        ['Updated Conversation', undefined, '770e8400-e29b-41d4-a716-446655440002']
+        'UPDATE conversations SET name = ?, creator_id = ?, updated_at = ? WHERE convo_id = ? RETURNING *;',
+        ['Updated Conversation', undefined, expect.any(Date), '770e8400-e29b-41d4-a716-446655440002']
       )
       expect(conversation.name).toBe('Updated Conversation')
     })
@@ -121,7 +123,7 @@ describe('Conversation Model', () => {
       await conversation.delete()
 
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('DELETE FROM conversations WHERE convo_id = $1'),
+        expect.stringContaining('DELETE FROM conversations WHERE convo_id = ?'),
         ['770e8400-e29b-41d4-a716-446655440002']
       )
     })
@@ -188,7 +190,7 @@ describe('Conversation Model', () => {
       expect(conversation.id).toBe('770e8400-e29b-41d4-a716-446655440002')
       expect(conversation.name).toBe('Test Conversation')
       expect(mockQuery).toHaveBeenCalledWith(
-        'SELECT * FROM conversations WHERE convo_id = $1;',
+        'SELECT * FROM conversations WHERE convo_id = ?;',
         ['770e8400-e29b-41d4-a716-446655440002']
       )
     })
@@ -242,7 +244,7 @@ describe('Conversation Model', () => {
       expect(conversations[0].name).toBe('First Conversation')
       expect(conversations[1].name).toBe('Second Conversation')
       expect(mockQuery).toHaveBeenCalledWith(
-        'SELECT * FROM conversations WHERE creator_id = $1 ORDER BY updated_at DESC;',
+        'SELECT * FROM conversations WHERE creator_id = ? ORDER BY updated_at DESC;',
         ['550e8400-e29b-41d4-a716-446655440000']
       )
     })
@@ -289,7 +291,7 @@ describe('Conversation Model', () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO conversation_visits'),
-        ['550e8400-e29b-41d4-a716-446655440000', '770e8400-e29b-41d4-a716-446655440002']
+        ['550e8400-e29b-41d4-a716-446655440000', '770e8400-e29b-41d4-a716-446655440002', expect.any(Date)]
       )
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('ON CONFLICT'),
@@ -379,7 +381,7 @@ describe('Conversation Model', () => {
 
       expect(conversations).toHaveLength(1)
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('c.creator_id = $1'),
+        expect.stringContaining('c.creator_id = ?1'),
         ['550e8400-e29b-41d4-a716-446655440000']
       )
     })
@@ -441,7 +443,7 @@ describe('Conversation Model', () => {
         ['550e8400-e29b-41d4-a716-446655440000']
       )
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('WHERE cv.user_id = $1 OR c.creator_id = $1'),
+        expect.stringContaining('WHERE cv.user_id = ?1 OR c.creator_id = ?1'),
         expect.any(Array)
       )
     })
@@ -479,7 +481,7 @@ describe('Conversation Model', () => {
 
       expect(conversations).toHaveLength(1)
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('WHERE c.creator_id = $1'),
+        expect.stringContaining('WHERE c.creator_id = ?1'),
         ['550e8400-e29b-41d4-a716-446655440000']
       )
     })
@@ -541,7 +543,7 @@ describe('Conversation Model', () => {
       expect(conversations).toHaveLength(2)
       expect(conversations[0]).toBeInstanceOf(Conversation)
       expect(mockQuery).toHaveBeenCalledWith(
-        'SELECT * FROM conversations WHERE updated_at < $1;',
+        'SELECT * FROM conversations WHERE updated_at < ?;',
         expect.arrayContaining([expect.any(String)])
       )
     })
@@ -557,7 +559,7 @@ describe('Conversation Model', () => {
       expect(mockQuery).toHaveBeenCalledTimes(2)
       expect(mockQuery).toHaveBeenNthCalledWith(
         2,
-        expect.stringContaining('DELETE FROM conversations WHERE updated_at < $1'),
+        expect.stringContaining('DELETE FROM conversations WHERE updated_at < ?'),
         expect.any(Array)
       )
       expect(conversations).toHaveLength(1)
