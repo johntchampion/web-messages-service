@@ -22,6 +22,7 @@ This backend service provides a complete messaging platform with:
 - **Email Verification**: Optional 6-digit verification codes via Mailjet
 - **Password Reset**: Secure token-based password reset flow
 - **Real-Time Messaging**: Socket.IO for instant message delivery
+- **Push Notifications**: Web Push notifications for new messages, for logged-in and anonymous devices
 - **Conversation Management**: Create, delete, and manage conversations
 - **Message Types**: Support for text and image messages
 - **Anonymous Access**: Participate without authentication via shared links
@@ -74,6 +75,9 @@ Create a `.env` file in the root directory with these variables:
 | MAILJET_API_KEY    | Mailjet API key (required if SEND_EMAILS=true)      |                        |
 | MAILJET_API_SECRET | Mailjet API secret (required if SEND_EMAILS=true)   |                        |
 | OLLAMA_HOST        | Ollama server URL — enables AI responses when set   | http://localhost:11434 |
+| VAPID_PUBLIC_KEY   | Web Push public key — push is enabled when all three VAPID variables are set |  |
+| VAPID_PRIVATE_KEY  | Web Push private key                                |                        |
+| VAPID_SUBJECT      | Contact for push services, e.g. `mailto:you@example.com` |                   |
 | NODE_ENV           | Environment mode ('production' or 'test')           |                        |
 
 ## Installation
@@ -236,9 +240,46 @@ The volume keeps the SQLite database at `/app/data` across container restarts.
 **POST** `/message`
 
 - Create new message
-- Body: `{ convoId, content }`
+- Body: `{ convoId, content, aiResponse?, pushSubscriptionId? }`
 - Requires: Authentication (not authorization - allows anonymous with token)
 - Returns: Message object
+- Sends push notifications to the conversation's subscribed devices. `pushSubscriptionId` identifies the sender's own device so it isn't notified
+
+### Push Notification Routes (`/push/*`)
+
+Respond `503` unless the VAPID variables are set. Generate keys with `npx web-push generate-vapid-keys`. A device is identified by its push subscription `endpoint`.
+
+A device is notified about a conversation when it follows the conversation, or when its logged-in user visited the conversation, unless that user muted it. Sender devices and devices currently viewing the conversation (see `viewing-conversation`) are skipped.
+
+**GET** `/push/public-key`
+
+- Returns: `{ publicKey }` for `PushManager.subscribe()`
+
+**POST** `/push/subscriptions`
+
+- Save this device's subscription, linking it to the user if authenticated (and unlinking it if not)
+- Body: `{ subscription: { endpoint, keys: { p256dh, auth } }, previousEndpoint? }`
+- `previousEndpoint`: the device's earlier endpoint, when the browser rotated the subscription; the device keeps its id and follows
+- Returns: `{ subscriptionId }`
+
+**DELETE** `/push/subscriptions`
+
+- Body: `{ endpoint }`
+- Returns: `{ removed }`
+
+**GET** `/push/conversations/:convoId?endpoint=...`
+
+- Returns: `{ enabled }` — whether this device is notified about the conversation
+
+**PUT** `/push/conversations/:convoId`
+
+- Turn notifications on: follow the conversation on this device, and unmute it for the authenticated user
+- Body: `{ endpoint }`
+
+**DELETE** `/push/conversations/:convoId`
+
+- Turn notifications off: unfollow the conversation on this device, and mute it for the authenticated user
+- Body: `{ endpoint }`
 
 ### Conversation Routes
 
@@ -290,10 +331,16 @@ All Socket.IO events use callbacks for responses. Responses follow the format:
   - Note: Messages include enriched sender details (displayName, profilePicURL) for authenticated users
 
 - `create-message` - Create/send a new message
-  - Params: `{ convoId, content, userName?, userAvatar?, token? }`
+  - Params: `{ convoId, content, userName?, userAvatar?, token?, aiResponse?, pushSubscriptionId? }`
   - Returns: `{ message: {...} }`
   - Note: Provide `token` for authenticated messaging, or `userName`/`userAvatar` for anonymous
-  - Broadcasts `message-created` to conversation room
+  - Broadcasts `message-created` to conversation room and sends push notifications
+
+**Push Notification Presence Events:**
+
+- `viewing-conversation` - This client is visibly viewing a conversation; its device gets no pushes for it
+  - Params: `{ convoId, pushSubscriptionId }`
+- `stopped-viewing-conversation` - This client is no longer viewing a conversation (also cleared on disconnect)
 
 **Conversation Events:**
 

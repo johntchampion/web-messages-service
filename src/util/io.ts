@@ -8,6 +8,9 @@ import User from '../models/user'
 import { AccessToken } from '../models/user'
 import { getUploadURL } from './upload'
 import { handleAIResponse } from './ai-response'
+import { notifyNewMessage } from './message-notifications'
+import { startViewing, stopViewing } from './conversation-viewers'
+import PushSubscription from '../models/push-subscription'
 
 /**
  * The object used to emit information to sockets.
@@ -203,11 +206,18 @@ export const setupSocketIO = (server: http.Server) => {
     /**
      * Create/send a new message.
      * REST equivalent: POST /message
-     * Params: { convoId, content, userName?, userAvatar?, token? }
+     * Params: { convoId, content, userName?, userAvatar?, token?, aiResponse?, pushSubscriptionId? }
      */
     socket.on('create-message', async (params = {}, callback) => {
-      const { convoId, content, userName, userAvatar, token, aiResponse } =
-        params
+      const {
+        convoId,
+        content,
+        userName,
+        userAvatar,
+        token,
+        aiResponse,
+        pushSubscriptionId,
+      } = params
 
       if (!convoId || !content) {
         callback?.({
@@ -255,8 +265,14 @@ export const setupSocketIO = (server: http.Server) => {
 
         broadcastMessage(convoId, newMessage)
 
+        const conversation = await Conversation.findById(convoId)
+        notifyNewMessage({
+          conversation,
+          message: newMessage,
+          senderSubscriptionId: pushSubscriptionId,
+        })
+
         if (aiResponse === true) {
-          const conversation = await Conversation.findById(convoId)
           handleAIResponse(conversation).catch((err) =>
             console.error('AI response failed:', err),
           )
@@ -621,6 +637,7 @@ export const setupSocketIO = (server: http.Server) => {
 
       try {
         const removed = await Conversation.removeVisit(auth.userId, convoId)
+        await PushSubscription.unfollowForUser(auth.userId, convoId)
 
         callback?.({
           success: true,
@@ -646,6 +663,32 @@ export const setupSocketIO = (server: http.Server) => {
      */
     socket.on('typing', ({ convoId, userName }) => {
       socket.to(convoId).emit('user-typing', { convoId, userName })
+    })
+
+    // ==================== PUSH NOTIFICATION PRESENCE ====================
+
+    /**
+     * Report that this client is visibly viewing a conversation, so its
+     * device is not sent push notifications for that conversation.
+     * Params: { convoId, pushSubscriptionId }
+     */
+    socket.on('viewing-conversation', (params = {}) => {
+      const { convoId, pushSubscriptionId } = params
+      if (typeof convoId !== 'string' || typeof pushSubscriptionId !== 'string') {
+        return
+      }
+      startViewing(socket.id, convoId, pushSubscriptionId)
+    })
+
+    /**
+     * Report that this client is no longer viewing any conversation.
+     */
+    socket.on('stopped-viewing-conversation', () => {
+      stopViewing(socket.id)
+    })
+
+    socket.on('disconnect', () => {
+      stopViewing(socket.id)
     })
 
     // ==================== ROOM MANAGEMENT ====================

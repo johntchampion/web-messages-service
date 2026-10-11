@@ -8,10 +8,12 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') })
 
 import RequestError from './util/error'
 import { aiEnabled } from './util/ollama'
+import { pushEnabled } from './util/push-client'
 import { setupSocketIO } from './util/io'
 import authRoutes from './routes/auth'
 import messageRoutes from './routes/message'
 import conversationRoutes from './routes/conversation'
+import pushRoutes from './routes/push'
 import { deleteConversations, deleteExpiredRefreshTokens } from './util/cron'
 
 const app = express()
@@ -28,6 +30,7 @@ app.get('/', (_: Request, res: Response, __: NextFunction) => {
 })
 
 app.use('/auth', authRoutes)
+app.use('/push', pushRoutes)
 app.use(messageRoutes)
 app.use(conversationRoutes)
 
@@ -39,6 +42,7 @@ app.get('/health-check', (req: Request, res: Response, next: NextFunction) => {
       emailSendingEnabled: process.env.SEND_EMAILS === 'true',
       imageUploadsEnabled: process.env.ENABLE_UPLOADS === 'true',
       aiResponsesEnabled: aiEnabled,
+      pushNotificationsEnabled: pushEnabled,
     },
   })
 })

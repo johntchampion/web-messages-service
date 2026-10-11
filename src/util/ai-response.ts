@@ -3,6 +3,7 @@ import SystemAgent from '../models/system-agent'
 import Conversation from '../models/conversation'
 import { aiEnabled, generateAIResponse } from './ollama'
 import { broadcastMessage, broadcastTypingIndicator } from './io'
+import { notifyNewMessage } from './message-notifications'
 
 /**
  * Orchestrates the full AI response flow:
@@ -54,6 +55,7 @@ export async function handleAIResponse(
     await aiMessage.create()
 
     broadcastMessage(conversation.id!, aiMessage)
+    notifyNewMessage({ conversation, message: aiMessage })
   } catch (error) {
     console.error('AI response failed:', error)
   } finally {

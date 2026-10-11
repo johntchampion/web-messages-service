@@ -123,6 +123,38 @@ CREATE TABLE IF NOT EXISTS conversation_visits (
     PRIMARY KEY (user_id, convo_id)
 );
 
+-- PUSH SUBSCRIPTIONS (one per browser/device, optionally linked to a user)
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    subscription_id TEXT PRIMARY KEY,
+    user_id         TEXT REFERENCES users (user_id) ON DELETE SET NULL,
+    endpoint        TEXT NOT NULL CHECK (length(endpoint) <= 2048),
+    p256dh          TEXT NOT NULL CHECK (length(p256dh) <= 256),
+    auth            TEXT NOT NULL CHECK (length(auth) <= 256),
+    user_agent      TEXT,
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+
+    CONSTRAINT push_subscriptions_endpoint_uk UNIQUE (endpoint)
+);
+
+-- PUSH SUBSCRIPTION FOLLOWS (conversations a device explicitly wants notifications for)
+CREATE TABLE IF NOT EXISTS push_subscription_follows (
+    subscription_id TEXT NOT NULL REFERENCES push_subscriptions (subscription_id) ON DELETE CASCADE,
+    convo_id        TEXT NOT NULL REFERENCES conversations (convo_id) ON DELETE CASCADE,
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+
+    PRIMARY KEY (subscription_id, convo_id)
+);
+
+-- CONVERSATION NOTIFICATION MUTES (users who turned off notifications for a conversation)
+CREATE TABLE IF NOT EXISTS conversation_notification_mutes (
+    user_id     TEXT NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
+    convo_id    TEXT NOT NULL REFERENCES conversations (convo_id) ON DELETE CASCADE,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+
+    PRIMARY KEY (user_id, convo_id)
+);
+
 -- ============================================
 -- Indexes for common access patterns
 -- ============================================
@@ -135,6 +167,8 @@ CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON conversations (update
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions (user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_rt_hash ON sessions (rt_hash);
 CREATE INDEX IF NOT EXISTS idx_conversation_visits_convo_id ON conversation_visits (convo_id);
+CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions (user_id);
+CREATE INDEX IF NOT EXISTS idx_push_subscription_follows_convo_id ON push_subscription_follows (convo_id);
 
 -- ============================================
 -- Triggers

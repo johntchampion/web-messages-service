@@ -14,6 +14,7 @@ router.post(
   body('convoId').exists().withMessage('Conversation ID is required.'),
   body('content').exists().withMessage('Message content is required.'),
   body('aiResponse').optional().isBoolean().withMessage('aiResponse must be a boolean.'),
+  body('pushSubscriptionId').optional({ values: 'null' }).isUUID().withMessage('pushSubscriptionId must be a UUID.'),
   messageController.createMessage
 )
 

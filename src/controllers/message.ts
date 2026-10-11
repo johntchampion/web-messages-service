@@ -6,6 +6,7 @@ import Conversation from '../models/conversation'
 import User from '../models/user'
 import { getUploadURL } from '../util/upload'
 import { handleAIResponse } from '../util/ai-response'
+import { notifyNewMessage } from '../util/message-notifications'
 
 export const getMessages = async (req: Request, res: Response) => {
   const convoId: string = req.query.convoId as string
@@ -108,6 +109,7 @@ export const createMessage = async (req: Request, res: Response) => {
   const userName: string = req.body.userName
   const userAvatar: string = req.body.userAvatar
   const aiResponse: boolean = req.body.aiResponse === true
+  const pushSubscriptionId: string | null = req.body.pushSubscriptionId ?? null
 
   const user = req.userId ? await User.findById(req.userId!) : null
 
@@ -122,8 +124,15 @@ export const createMessage = async (req: Request, res: Response) => {
     })
     await newMessage.create()
 
+    const conversation = await Conversation.findById(convoId)
+    notifyNewMessage({
+      conversation,
+      message: newMessage,
+      senderName: user ? user.displayName : userName,
+      senderSubscriptionId: pushSubscriptionId,
+    })
+
     if (aiResponse) {
-      const conversation = await Conversation.findById(convoId)
       handleAIResponse(conversation).catch((err) =>
         console.error('AI response failed:', err),
       )

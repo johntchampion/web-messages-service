@@ -62,6 +62,7 @@ Required environment variables (create a `.env` file in the root):
 - `MAILJET_API_SECRET` - API secret to authenticate with Mailjet
 - `NODE_ENV` - Set to 'test' to enable additional logging
 - `OLLAMA_HOST` - Ollama server URL for AI messages (defaults to `http://localhost:11434`)
+- `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` - Web Push keys and contact (`mailto:...`). Push notifications are enabled only when all three are set. Generate keys with `npx web-push generate-vapid-keys`
 
 ## Architecture
 
@@ -138,6 +139,16 @@ All models follow a consistent pattern:
 - `getDeletionDate()` calculates when conversation will be deleted
 - `findByAge()` queries conversations by age, optionally deleting them
 
+**PushSubscription** (`src/models/push-subscription.ts`):
+
+- One row per browser/device in `push_subscriptions`, keyed by its unique push `endpoint`, optionally linked to a user (`ON DELETE SET NULL`, so the device stays subscribed anonymously)
+- `upsert()` saves by endpoint and replaces the linked user; `follow()`/`unfollow()` manage rows in `push_subscription_follows`
+- `findRecipientsForConversation()` returns devices that follow the conversation or whose user visited it (`conversation_visits`), minus users who muted it, minus the sender's devices
+
+**ConversationMute** (`src/models/conversation-mute.ts`):
+
+- Rows in `conversation_notification_mutes`: a user turned notifications off for a conversation they visited
+
 **SystemAgent** (`src/models/system-agent.ts`):
 
 - Represents AI/system agents that can send messages in conversations
@@ -194,7 +205,8 @@ The application uses a dual-token system for enhanced security:
 
 - `get-messages` - Fetch messages for a conversation (params: `{ convoId }`)
 - `send-message` - Send a new message (params: `{ convoId, content, userName, userAvatar }`)
-- `create-message` - Send a new message (params: `{ convoId, content, userName?, userAvatar?, token?, aiResponse? }`). When `aiResponse` is true, triggers an AI response via Ollama
+- `create-message` - Send a new message (params: `{ convoId, content, userName?, userAvatar?, token?, aiResponse?, pushSubscriptionId? }`). When `aiResponse` is true, triggers an AI response via Ollama
+- `viewing-conversation` / `stopped-viewing-conversation` - Report which conversation a device is visibly viewing (params: `{ convoId, pushSubscriptionId }`), so it isn't sent pushes for it
 - `create-conversation` - Create new conversation (params: `{ name }`)
 - `delete-conversation` - Delete conversation (params: `{ convoId }`)
 
@@ -236,7 +248,13 @@ Routes use `express-validator` for input validation:
 **Message Routes**:
 
 - `GET /messages` - List messages (defined in `src/routes/message.ts`)
-- `POST /message` - Create message (requires auth). Accepts optional `aiResponse: boolean` to trigger an AI response in the conversation
+- `POST /message` - Create message (requires auth). Accepts optional `aiResponse: boolean` to trigger an AI response in the conversation, and `pushSubscriptionId` to skip notifying the sender's device
+
+**Push Routes** (`/push/*`, `503` unless push is enabled):
+
+- `GET /push/public-key` - VAPID public key
+- `POST /push/subscriptions` / `DELETE /push/subscriptions` - Save or remove this device's subscription
+- `GET|PUT|DELETE /push/conversations/:convoId` - Read, turn on, or turn off notifications for a conversation on this device (`endpoint` identifies the device)
 
 **Conversation Routes**:
 
@@ -310,7 +328,7 @@ npm run test:verbose     # Run tests with verbose output
 
 **Test Coverage:**
 
-Current test coverage (191 tests; the coverage figures below are from an earlier run):
+Current test coverage (219 tests; the coverage figures below are from an earlier run):
 
 - Models: 93.77% statement coverage
 - Authentication middleware: 100% coverage
@@ -336,6 +354,10 @@ Current test coverage (191 tests; the coverage figures below are from an earlier
 - `jest.config.js` - Jest configuration with ts-jest preset
 - `tsconfig.json` - TypeScript configured with Jest types
 - Coverage reports are generated in `coverage/` directory (gitignored)
+
+### Push Notifications
+
+Every new message (REST, Socket.IO, or AI) calls `notifyNewMessage()` in `src/util/message-notifications.ts`, which is fire-and-forget like AI responses. It finds recipients, drops devices currently viewing the conversation (`src/util/conversation-viewers.ts`, in-memory and keyed by socket), and sends through `src/util/push-client.ts`, which deletes subscriptions the push service reports as gone (404/410). The server-side viewing check matters because iOS revokes subscriptions whose pushes don't show a notification.
 
 ### Message Content Validation
 

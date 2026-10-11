@@ -1,6 +1,7 @@
 import { Request, Response } from 'express'
 
 import Conversation from '../models/conversation'
+import PushSubscription from '../models/push-subscription'
 
 export const getConversations = async (req: Request, res: Response) => {
   try {
@@ -148,6 +149,7 @@ export const removeConversationVisit = async (req: Request, res: Response) => {
 
   try {
     const removed = await Conversation.removeVisit(req.userId!, convoId)
+    await PushSubscription.unfollowForUser(req.userId!, convoId)
 
     if (!removed) {
       return res.status(404).json({
